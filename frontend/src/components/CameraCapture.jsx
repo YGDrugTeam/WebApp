@@ -1,12 +1,17 @@
-app.add_middleware
+async function uploadImage(photo) {
+    const box = new FormData();
+    box.append('file', photo, 'pill.jpg');
 
-allow_origins
-allow_credentials
-allow_methods
-allow_headers
+    try {
+        const answer = await axios.post('http://localhost:8000/analyze', box);
+        const pillName = answer.data.pill_name; // 서버가 읽어준 약 이름
+
+        console.log("인")
+    }
+}
 
 const formData = new FormData();
-formData.append('file', blobData, 'pill.jpb');
+formData.append('file', blobData, 'pill.jpg');
 axios.post('http://localhost:8000/analyze', formData)
 
 const uploadImage

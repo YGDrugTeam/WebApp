@@ -1,0 +1,57 @@
+.main-title {
+    font-size: 55px;
+    font-weight: 900;
+    color: #1A365D; /* Streamlit 코드에서 복사 */
+    text-align: center;
+    padding: 20px;
+    background: #EBF8FF;
+    border-radius: 20px;
+    margin-bottom: 30px;
+}
+
+.two-column-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px; /* 적당한 간격 */
+    padding: 20px;
+}
+
+.sub-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #2D3748;
+    border-left: 12px solid #3182CE;
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+
+.drug-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    background: white;
+    border-radius: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 4px solid #3182CE;
+}
+
+.drug-item span {
+    font-size: 20px;
+    font-weight: 600;
+    color: #2D3748;
+}
+
+.drug-item button {
+    padding: 8px 16px;
+    background: #E53E3E;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.drug-item button:hover {
+    background: #C53030;
+}

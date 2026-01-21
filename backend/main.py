@@ -1,3 +1,6 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 import model
 import numpy as np
 import cv2
@@ -5,6 +8,13 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware, # 가져온 미들웨어 클래스 이름
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.post("/analyze")
 async def analyze_pill(file: UploadFile = File(...)):    
@@ -14,19 +24,16 @@ async def analyze_pill(file: UploadFile = File(...)):
     image_bytes = np.frombuffer(contents, np.uint8) 
     img = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
     
+    result = model.ocr_reader(img)
+
     return {
         "filename": file.filename,
         "size": len(contents), # 파일 크기(byte)
         "message": "AI가 이미지를 확인했습니다!",
         "detected_text": "알약 이름을 읽는 중...", # 여기에 결과가 담길 예정입니다.
-        "pill_name": ai_result
+        "pill_name": result
     }
 
-app.add_middleware(
-    CORSMiddleware, # 가져온 미들웨어 클래스 이름
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
-
-result = model.ocr_reader(img)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

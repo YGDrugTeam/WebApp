@@ -19,5 +19,11 @@ frontend/.env
 # Generated audio artifacts
 backend/tts_test_*.mp3
 
+# Local backend logs
+backend/*.log
+
 # Local data exports
 backend/data/
+
+# RAG generated index artifacts
+backend/rag_agent/*.pkl

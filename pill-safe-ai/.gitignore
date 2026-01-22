@@ -9,6 +9,9 @@ __pycache__/
 venv/
 ENV/
 
+# Bundles / exports
+colab_bundle.zip
+
 # OS / editor
 .DS_Store
 Thumbs.db

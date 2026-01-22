@@ -4,8 +4,13 @@ const api = axios.create({
     baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000'
 });
 
-export const analyzePill = async (formData) => {
-    const res = await api.post('/analyze', formData);
+export const analyzePill = async (formData, options = {}) => {
+    const params = {};
+    const mode = options?.mode;
+    const debug = options?.debug;
+    if (typeof mode === 'string' && mode.trim()) params.mode = mode.trim();
+    if (debug === 1 || debug === true) params.debug = 1;
+    const res = await api.post('/analyze', formData, { params });
     return res.data;
 };
 
@@ -67,6 +72,20 @@ export const ragQuery = async (query, options = {}) => {
     }
     if (typeof options?.mfdsScanPages === 'number' && Number.isFinite(options.mfdsScanPages)) {
         payload.mfds_scan_pages = options.mfdsScanPages;
+    }
+    if (typeof options?.ageGroup === 'string' && options.ageGroup.trim()) {
+        payload.age_group = options.ageGroup.trim();
+    }
+    const ageYearsRaw = options?.ageYears;
+    if (ageYearsRaw !== undefined && ageYearsRaw !== null && String(ageYearsRaw).trim() !== '') {
+        const n = Number(ageYearsRaw);
+        if (Number.isFinite(n)) payload.age_years = Math.max(0, Math.floor(n));
+    }
+    if (Array.isArray(options?.profileTags) && options.profileTags.length > 0) {
+        payload.profile_tags = options.profileTags
+            .map((t) => String(t ?? '').trim())
+            .filter(Boolean)
+            .slice(0, 6);
     }
     const res = await api.post('/rag/query', payload);
     return res.data;

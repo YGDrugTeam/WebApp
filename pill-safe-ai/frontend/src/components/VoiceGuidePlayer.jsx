@@ -54,7 +54,7 @@ export default function VoiceGuidePlayer({ pillList, interactions, aiReport, voi
 			{showDiagnostics && (
 				<div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: '1px solid #EDF2F7', background: '#FAFAFA' }}>
 					<div className="meta" style={{ marginTop: 0 }}>
-						voicesLoaded: <b>{String(Boolean(voicesLoaded))}</b> / 전체: <b>{voices?.length ?? 0}</b> / ko-KR 계열: <b>{koVoices.length}</b>
+						보이스 로딩됨: <b>{voicesLoaded ? '예' : '아니오'}</b> / 전체: <b>{voices?.length ?? 0}</b> / ko-KR 계열: <b>{koVoices.length}</b>
 					</div>
 					<div className="meta" style={{ marginTop: 6 }}>
 						한국어 여성 힌트 감지: <b style={{ color: hasKoFemale ? '#2F855A' : '#C53030' }}>{hasKoFemale ? '예' : '아니오'}</b>
@@ -66,10 +66,10 @@ export default function VoiceGuidePlayer({ pillList, interactions, aiReport, voi
 						<table style={{ width: '100%', borderCollapse: 'collapse' }}>
 							<thead>
 								<tr>
-									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>name</th>
-									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>lang</th>
-									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>local</th>
-									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>default</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>이름</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>언어</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>로컬</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>기본</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -77,8 +77,8 @@ export default function VoiceGuidePlayer({ pillList, interactions, aiReport, voi
 									<tr key={`${v?.name}-${v?.lang}`}> 
 										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.name}</td>
 										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.lang}</td>
-										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{String(Boolean(v?.localService))}</td>
-										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{String(Boolean(v?.default))}</td>
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.localService ? '예' : '아니오'}</td>
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.default ? '예' : '아니오'}</td>
 									</tr>
 								))}
 							</tbody>
@@ -91,26 +91,35 @@ export default function VoiceGuidePlayer({ pillList, interactions, aiReport, voi
 			)}
 			<div className="btn-row" style={{ alignItems: 'center' }}>
 				<span style={{ color: '#4A5568' }}>목소리</span>
-				<div className="segmented" role="group" aria-label="voice gender">
+				<div className="segmented" role="group" aria-label="목소리 성별">
 					<button
 						type="button"
 						className={voiceGender === 'female' ? 'active' : ''}
-						onClick={() => onVoiceGenderChange?.('female')}
+						onClick={() => {
+							onVoiceGenderChange?.('female');
+							speak(script, {
+								gender: 'female',
+								engine: 'auto',
+								fallbackToBrowserOnServerFail: true,
+								preferredNames: ['SunHi', '선희', 'Heami', 'female'],
+							});
+						}}
 					>
 						여성
 					</button>
 					<button
-						onClick={() =>
+						type="button"
+						className={voiceGender === 'male' ? 'active' : ''}
+						onClick={() => {
+							onVoiceGenderChange?.('male');
 							speak(script, {
 								gender: 'male',
 								engine: 'auto',
 								fallbackToBrowserOnServerFail: true,
-								// 'Minjun', 'Google 한국어', 'Heami' 등 남성 음성 키워드 추가
-								preferredNames: ['InJoon', '인준', 'Minjun', '민준', 'Google 한국어', 'ko-KR-Standard-C', 'male']
-							})
-						}
+								preferredNames: ['InJoon', '인준', 'Minjun', '민준', 'Google 한국어', 'ko-KR-Standard-C', 'male'],
+							});
+						}}
 						disabled={speaking}						
-						type="button"
 					>
 						남성
 					</button>

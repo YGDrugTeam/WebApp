@@ -10,6 +10,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from .sources import RagDocument
 
 
+_RAG_INDEX_VERSION = 4
+
+
 def _char_ngrams(text: str, n: int = 3) -> List[str]:
     # Basic normalization for Korean+English brand queries
     s = re.sub(r"\s+", " ", (text or "").strip().lower())
@@ -82,6 +85,7 @@ class RagIndex:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "version": _RAG_INDEX_VERSION,
             "docs": self._docs,
             "df": self._df,
             "vectors": [(dv.doc.id, dv.vec, dv.norm) for dv in self._vectors],
@@ -93,12 +97,22 @@ class RagIndex:
         p = Path(path)
         if not p.exists():
             return False
-        with p.open("rb") as f:
-            payload = pickle.load(f)
+
+        try:
+            with p.open("rb") as f:
+                payload = pickle.load(f)
+        except Exception:
+            # If the pickle was created under a different module path
+            # (e.g., "rag_agent" vs "backend.rag_agent"), unpickling can fail.
+            # In that case, return False so callers can rebuild the index.
+            return False
 
         docs = payload.get("docs")
         df = payload.get("df")
         vectors = payload.get("vectors")
+        version = payload.get("version")
+        if version != _RAG_INDEX_VERSION:
+            return False
         if not isinstance(docs, list) or not isinstance(df, dict) or not isinstance(vectors, list):
             return False
 

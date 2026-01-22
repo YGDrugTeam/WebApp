@@ -41,22 +41,42 @@ try:
 except Exception:  # pragma: no cover
     speechsdk = None
 
-from model import ocr_reader, OCR_GPU_ENABLED, OCR_GPU_REASON
-from matcher import extract_candidates, match_drug
-from mfds_openapi import MFDSOpenAPIClient, MFDSService, MFDSOpenAPIError, normalize_drug_item
-from odcloud_openapi import (
-    ODCloudOpenAPIClient,
-    ODCloudService,
-    ODCloudOpenAPIError,
-    match_row_to_pair,
-    match_row_to_pair_ingredients,
-    row_product_names,
-    row_product_codes,
-    row_reason,
-)
-
-from rag_agent.service import RagService
-from rag_agent.prompt_templates import rag_prompt_bundle
+try:
+    # When launched as a package (e.g. uvicorn backend.main:app)
+    from backend.model import ocr_reader, OCR_GPU_ENABLED, OCR_GPU_REASON
+    from backend.matcher import extract_candidates, match_drug
+    from backend.mfds_openapi import MFDSOpenAPIClient, MFDSService, MFDSOpenAPIError, normalize_drug_item
+    from backend.odcloud_openapi import (
+        ODCloudOpenAPIClient,
+        ODCloudService,
+        ODCloudOpenAPIError,
+        match_row_to_pair,
+        match_row_to_pair_ingredients,
+        row_product_names,
+        row_product_codes,
+        row_reason,
+    )
+    from backend.rag_agent.service import RagService
+    from backend.rag_agent.prompt_templates import rag_prompt_bundle
+    from backend.ocr_pipeline import run_ocr_best_effort
+except Exception:  # pragma: no cover
+    # When launched from backend/ as a script (e.g. python main.py)
+    from model import ocr_reader, OCR_GPU_ENABLED, OCR_GPU_REASON
+    from matcher import extract_candidates, match_drug
+    from mfds_openapi import MFDSOpenAPIClient, MFDSService, MFDSOpenAPIError, normalize_drug_item
+    from odcloud_openapi import (
+        ODCloudOpenAPIClient,
+        ODCloudService,
+        ODCloudOpenAPIError,
+        match_row_to_pair,
+        match_row_to_pair_ingredients,
+        row_product_names,
+        row_product_codes,
+        row_reason,
+    )
+    from rag_agent.service import RagService
+    from rag_agent.prompt_templates import rag_prompt_bundle
+    from ocr_pipeline import run_ocr_best_effort
 
 app = FastAPI()
 
@@ -105,6 +125,13 @@ class RagQueryRequest(BaseModel):
     use_tools: bool | None = True
     # MFDS local scan pages (for endpoints that don't filter reliably)
     mfds_scan_pages: int | None = None
+    # Optional: user profile hint to tailor retrieval/wording.
+    # Frontend uses values like: "student" | "senior".
+    age_group: str | None = None
+    # Optional: numeric age in years. If provided, overrides age_group bucketing.
+    age_years: int | None = None
+    # Optional: additional profile tags (e.g., ["student"]).
+    profile_tags: List[str] | None = None
 
 
 class RagIndexRequest(BaseModel):
@@ -268,22 +295,104 @@ async def _synthesize_edge_tts_mp3(text: str, voice: str, rate: str | None, volu
                 pass
 
 @app.post("/analyze")
-async def analyze_image(file: UploadFile = File(...)):
+async def analyze_image(
+    file: UploadFile = File(...),
+    mode: str = Query("auto"),
+    debug: int = Query(0),
+):
     pills = ["타이레놀 500mg", "아스피린", "베아제 정", "탁센", "겔포스 M"]
 
     try:
         raw = await file.read()
-        data = np.frombuffer(raw, dtype=np.uint8)
-        img = cv2.imdecode(data, cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError("Invalid image")
+        mode_norm = str(mode or "auto").strip().lower()
+        if mode_norm not in {"auto", "box", "pill"}:
+            mode_norm = "auto"
 
-        # Light preprocessing for OCR
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.bilateralFilter(gray, 7, 50, 50)
-        _, thr = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        def _dedup_merge_texts(texts: list[str]) -> str:
+            out: list[str] = []
+            seen = set()
+            for t in texts:
+                s = str(t or "").strip()
+                if not s:
+                    continue
+                key = " ".join(s.lower().split())
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(s)
+            return " ".join(out).strip()
 
-        ocr_text = ocr_reader(thr)
+        def _best_region_score(pass_attempts: list, regions: set[str]) -> float:
+            best = 0.0
+            for a in pass_attempts or []:
+                try:
+                    if getattr(a, "region", None) in regions:
+                        best = max(best, float(getattr(a, "score", 0.0) or 0.0))
+                except Exception:
+                    continue
+            return float(best)
+
+        def _best_any_score(pass_attempts: list) -> float:
+            best = 0.0
+            for a in pass_attempts or []:
+                try:
+                    best = max(best, float(getattr(a, "score", 0.0) or 0.0))
+                except Exception:
+                    continue
+            return float(best)
+
+        BOX_MIN_SCORE = float(os.getenv("OCR_BOX_MIN_SCORE", "1.3") or 1.3)
+        PILL_MIN_SCORE = float(os.getenv("OCR_PILL_MIN_SCORE", "1.1") or 1.1)
+
+        ocr_text, attempts, ocr_texts = run_ocr_best_effort(raw, mode=mode_norm)
+        attempt_passes: list[tuple[str, list]] = [(mode_norm, attempts)]
+
+        # Scores from the first pass (used in debug output and auto-retry decisions).
+        box_score = _best_region_score(attempts, {"box_warp", "text_block"})
+        pill_score = _best_region_score(attempts, {"pill_crop"})
+        any_score = _best_any_score(attempts)
+
+        # Auto-tuning: if auto mode fails to extract box/label text, try pill mode first,
+        # then box mode; if pill text is missing, try pill mode.
+        if mode_norm == "auto":
+            box_text = str(ocr_texts.get("ocr_text_box") or "").strip()
+            pill_text = str(ocr_texts.get("ocr_text_pill") or "").strip()
+
+            needs_box_retry = (not box_text) or (len(box_text) < 3) or (box_score > 0 and box_score < BOX_MIN_SCORE)
+            needs_pill_retry = (not pill_text) or (len(pill_text) < 2) or (pill_score > 0 and pill_score < PILL_MIN_SCORE)
+
+            # If overall confidence is very low, be more willing to retry.
+            if any_score < 0.8:
+                needs_box_retry = True if not box_text else needs_box_retry
+                needs_pill_retry = True if not pill_text else needs_pill_retry
+
+            if needs_box_retry:
+                # Likely the user photographed the pill (imprint); try pill-focused OCR first.
+                _t, _a, _x = run_ocr_best_effort(raw, mode="pill", max_total_runs=16)
+                attempt_passes.append(("pill", _a))
+                pill_text = pill_text or str(_x.get("ocr_text_pill") or _x.get("ocr_text") or "").strip()
+
+                # If pill retry succeeded, update pill_score used for later decisions
+                pill_score = max(pill_score, _best_region_score(_a, {"pill_crop"}))
+
+                if needs_box_retry:
+                    _t2, _a2, _x2 = run_ocr_best_effort(raw, mode="box", max_total_runs=16)
+                    attempt_passes.append(("box", _a2))
+                    box_text = str(_x2.get("ocr_text_box") or _x2.get("ocr_text") or "").strip() or box_text
+                    box_score = max(box_score, _best_region_score(_a2, {"box_warp", "text_block"}))
+
+            elif needs_pill_retry:
+                _t, _a, _x = run_ocr_best_effort(raw, mode="pill", max_total_runs=16)
+                attempt_passes.append(("pill", _a))
+                pill_text = str(_x.get("ocr_text_pill") or _x.get("ocr_text") or "").strip() or pill_text
+                pill_score = max(pill_score, _best_region_score(_a, {"pill_crop"}))
+
+            merged = _dedup_merge_texts([box_text, pill_text, str(ocr_text or "")])
+            ocr_texts["ocr_text_box"] = box_text
+            ocr_texts["ocr_text_pill"] = pill_text
+            ocr_texts["ocr_text"] = merged
+            ocr_text = merged
+
         ocr_text = (ocr_text or "").strip()
 
         if ocr_text:
@@ -328,10 +437,42 @@ async def analyze_image(file: UploadFile = File(...)):
             return {
                 "pill_name": pill_name,
                 "ocr_text": ocr_text,
+                "ocr_text_box": ocr_texts.get("ocr_text_box", ""),
+                "ocr_text_pill": ocr_texts.get("ocr_text_pill", ""),
                 "candidates": candidates,
                 "matched": bool(best and best.get("matched")),
                 "score": int(best["score"]) if best else 0,
                 "top_matches": top_matches,
+                **(
+                    {
+                        "ocr_debug": (lambda items: items[:12])(
+                            sorted(
+                                [
+                                    {
+                                        "pass": pass_name,
+                                        "region": a.region,
+                                        "variant": a.variant,
+                                        "score": a.score,
+                                        "text": a.text,
+                                    }
+                                    for pass_name, pass_attempts in attempt_passes
+                                    for a in (pass_attempts or [])
+                                ],
+                                key=lambda x: float(x.get("score") or 0.0),
+                                reverse=True,
+                            )
+                        )
+                        ,
+                        "ocr_scores": {
+                            "box_min": BOX_MIN_SCORE,
+                            "pill_min": PILL_MIN_SCORE,
+                            "pass0_box": box_score,
+                            "pass0_pill": pill_score,
+                        },
+                    }
+                    if int(debug or 0) == 1
+                    else {}
+                ),
             }
 
     except Exception:
@@ -342,6 +483,8 @@ async def analyze_image(file: UploadFile = File(...)):
     return {
         "pill_name": f"{detected_pill} (인식됨)",
         "ocr_text": "",
+        "ocr_text_box": "",
+        "ocr_text_pill": "",
         "candidates": [],
         "matched": False,
         "score": 0,
@@ -424,6 +567,78 @@ async def rag_query(req: RagQueryRequest):
 
     k = req.k if isinstance(req.k, int) else 5
     k = max(1, min(10, k))
+
+    def _age_to_group(age_years: int | None) -> str:
+        if not isinstance(age_years, int):
+            return ""
+        if age_years < 0:
+            return ""
+        # Keep in sync with frontend bucketing (UI-only).
+        if age_years <= 6:
+            return "infant"
+        if age_years <= 12:
+            return "child"
+        if age_years <= 18:
+            return "teen"
+        if age_years <= 44:
+            return "adult"
+        if age_years <= 64:
+            return "middle"
+        return "senior"
+
+    def _label_and_terms_for_key(key: str) -> tuple[str, list[str]]:
+        k = str(key or "").strip().lower()
+        if not k:
+            return ("", [])
+        if k == "infant":
+            return ("유아", ["infant", "유아", "영유아"])
+        if k == "child":
+            return ("소아", ["child", "소아", "어린이"])
+        if k == "teen":
+            return ("청소년", ["teen", "청소년"])
+        if k == "adult":
+            return ("성인", ["adult", "성인"])
+        if k == "middle":
+            return ("중년", ["middle", "중년"])
+        if k == "senior":
+            return ("노년", ["senior", "노년", "고령자", "노인", "어르신"])
+        if k == "student":
+            return ("수험생", ["student", "수험생", "학생"])
+        if k == "pregnant":
+            return ("임신", ["pregnant", "임신", "임부"])
+        if k == "lactation":
+            return ("수유", ["lactation", "수유", "모유"])
+        if k == "liver":
+            return ("간질환", ["liver", "간", "간질환"])
+        if k == "kidney":
+            return ("신장질환", ["kidney", "신장", "신장질환"])
+        if k == "allergy":
+            return ("알레르기", ["allergy", "알레르기"])
+        return (k, [k])
+
+    age_key = _age_to_group(req.age_years) or str(req.age_group or "").strip().lower()
+    tag_keys = [str(x or "").strip().lower() for x in (req.profile_tags or [])]
+    tag_keys = [x for x in tag_keys if x]
+
+    selected_profile_keys: list[str] = []
+    for x in [age_key, *tag_keys]:
+        if not x:
+            continue
+        if x not in selected_profile_keys:
+            selected_profile_keys.append(x)
+
+    labels: list[str] = []
+    terms: list[str] = []
+    for key in selected_profile_keys:
+        lbl, t = _label_and_terms_for_key(key)
+        if lbl and lbl not in labels:
+            labels.append(lbl)
+        for w in t:
+            if w not in terms:
+                terms.append(w)
+
+    profile_label = " + ".join(labels).strip()
+    profile_terms = terms
 
     def _extract_drug_candidates(qtext: str) -> list[str]:
         s = re.sub(r"\s+", " ", (qtext or "").strip())
@@ -539,12 +754,14 @@ async def rag_query(req: RagQueryRequest):
                 if isinstance(dur_res, Response):
                     notes.append("DUR 조회 실패(서버 응답 오류)")
                 elif isinstance(dur_res, dict):
-                    warnings = dur_res.get("warnings") if isinstance(dur_res.get("warnings"), list) else []
+                    warnings_raw = dur_res.get("warnings")
+                    warnings = warnings_raw if isinstance(warnings_raw, list) else []
                     for w in warnings[:5]:
                         if not isinstance(w, dict):
                             continue
                         msg = str(w.get("message") or "").strip()
-                        related = w.get("related") if isinstance(w.get("related"), list) else []
+                        related_raw = w.get("related")
+                        related = related_raw if isinstance(related_raw, list) else []
                         rel = ", ".join([str(x) for x in related if str(x or "").strip()])
                         sn = msg or (f"병용금기 의심: {rel}" if rel else "병용금기")
                         ev.append(
@@ -563,13 +780,30 @@ async def rag_query(req: RagQueryRequest):
         return (ev, notes)
 
     try:
-        base = _RAG.answer(q, k=k)
+        q_for_rag = q
+        # Light retrieval bias toward profile-specific guides (no behavior change if none exist).
+        if profile_terms:
+            q_for_rag = f"{q}\n프로필: {' '.join(profile_terms)}"
+
+        base = _RAG.answer(q_for_rag, k=k)
 
         tool_ev, tool_notes = await _tool_evidence(q)
 
         # Merge evidence with official-first ordering
-        base_ev = base.get("evidence") if isinstance(base, dict) and isinstance(base.get("evidence"), list) else []
-        merged_ev = list(tool_ev) + [x for x in base_ev if isinstance(x, dict)]
+        base_ev_raw = base.get("evidence") if isinstance(base, dict) else None
+        base_ev = base_ev_raw if isinstance(base_ev_raw, list) else []
+
+        # Prefer profile-matching ageGuide docs when a profile is set.
+        if selected_profile_keys:
+            preferred_ids = set()
+            for k in selected_profile_keys:
+                preferred_ids.add(f"mk.age.{k}")
+                preferred_ids.add(f"mk.profile.{k}")
+            preferred = [x for x in base_ev if isinstance(x, dict) and str(x.get("id") or "") in preferred_ids]
+            rest = [x for x in base_ev if isinstance(x, dict) and str(x.get("id") or "") not in preferred_ids]
+            base_ev = preferred + rest
+
+        merged_ev = list(tool_ev or []) + [x for x in base_ev if isinstance(x, dict)]
 
         # Upgrade safety_level only with explicit official evidence
         safety_level = str(base.get("safety_level") or "unknown") if isinstance(base, dict) else "unknown"
@@ -582,6 +816,8 @@ async def rag_query(req: RagQueryRequest):
 
         # Build an answer that *only* lists evidence snippets.
         lines: list[str] = []
+        if profile_label:
+            lines.append(f"[사용자 프로필: {profile_label}]")
         if tool_ev:
             lines.append("[공식 근거(MFDS/DUR)]")
             for x in tool_ev[:3]:
@@ -597,9 +833,11 @@ async def rag_query(req: RagQueryRequest):
         if (not questions_needed) and (not tool_ev) and tool_notes:
             questions_needed = base.get("questions_needed") if isinstance(base.get("questions_needed"), list) else []
 
-        not_in_context = []
-        if isinstance(base, dict) and isinstance(base.get("not_in_context"), list):
-            not_in_context.extend([str(x) for x in base.get("not_in_context")])
+        not_in_context: list[str] = []
+        if isinstance(base, dict):
+            nic_raw = base.get("not_in_context")
+            if isinstance(nic_raw, list):
+                not_in_context.extend([str(x) for x in nic_raw])
         if tool_notes:
             not_in_context.extend([f"tools: {n}" for n in tool_notes])
 

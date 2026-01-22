@@ -31,3 +31,7 @@ backend/data/
 
 # RAG generated index artifacts
 backend/rag_agent/*.pkl
+
+# Local debug artifacts (generated during development)
+.git-*.txt
+.temp-*.txt

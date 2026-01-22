@@ -90,6 +90,66 @@ def _docs_from_medical_knowledge(payload: Dict[str, Any]) -> List[RagDocument]:
                 {"kind": "interaction", "ingredientA": a, "ingredientB": b, "severity": severity, "index": i},
             )
 
+    # Age/profile-specific guides
+    guides = payload.get("ageSpecificGuides")
+    if isinstance(guides, dict):
+        for key, row in guides.items():
+            if not isinstance(row, dict):
+                continue
+            profile_key = str(key or "").strip()
+            if not profile_key:
+                continue
+            target = str(row.get("target") or "").strip()
+            recs = row.get("recommendations")
+            recs_text = ", ".join([str(x).strip() for x in recs if str(x).strip()]) if isinstance(recs, list) else ""
+            caution = str(row.get("caution") or "").strip()
+
+            lines: List[str] = []
+            lines.append(f"프로필키: {profile_key}")
+            if target:
+                lines.append(f"대상: {target}")
+            if recs_text:
+                lines.append(f"추천: {recs_text}")
+            if caution:
+                lines.append(f"주의: {caution}")
+
+            add(
+                f"mk.age.{profile_key}",
+                f"프로필 가이드: {target or profile_key}",
+                "\n".join([x for x in lines if x]).strip(),
+                {"kind": "ageGuide", "profileKey": profile_key, "target": target},
+            )
+
+    # Extra profile-specific guides (e.g., pregnant/lactation/liver/kidney/allergy)
+    p_guides = payload.get("profileSpecificGuides")
+    if isinstance(p_guides, dict):
+        for key, row in p_guides.items():
+            if not isinstance(row, dict):
+                continue
+            profile_key = str(key or "").strip()
+            if not profile_key:
+                continue
+            target = str(row.get("target") or "").strip()
+            recs = row.get("recommendations")
+            recs_text = ", ".join([str(x).strip() for x in recs if str(x).strip()]) if isinstance(recs, list) else ""
+            caution = str(row.get("caution") or "").strip()
+
+            lines: List[str] = []
+            lines.append(f"프로필키: {profile_key}")
+            if target:
+                lines.append(f"대상: {target}")
+            if recs_text:
+                lines.append(f"추천: {recs_text}")
+            if caution:
+                lines.append(f"주의: {caution}")
+
+            add(
+                f"mk.profile.{profile_key}",
+                f"추가 프로필 가이드: {target or profile_key}",
+                "\n".join([x for x in lines if x]).strip(),
+                {"kind": "profileGuide", "profileKey": profile_key, "target": target},
+            )
+
     return docs
 
 

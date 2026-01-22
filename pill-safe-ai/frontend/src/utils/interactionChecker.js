@@ -180,5 +180,45 @@ export function checkInteractions(drugNames, options = {}) {
 		}
 	}
 
+	const profileTags = Array.isArray(options?.profileTags) ? options.profileTags : [];
+	if (profileTags.length) {
+		const profileGuides = knowledge?.profileSpecificGuides ?? {};
+		const legacyGuides = knowledge?.ageSpecificGuides ?? {}; // keep compatibility: e.g. 'student'
+		const seenMessages = new Set();
+
+		for (const rawTag of profileTags) {
+			const tag = String(rawTag ?? '').trim();
+			if (!tag) continue;
+			const guide = profileGuides?.[tag] ?? legacyGuides?.[tag];
+			if (!guide) continue;
+
+			const target = String(guide.target ?? '').trim();
+			const recs = Array.isArray(guide.recommendations) ? guide.recommendations.filter(Boolean) : [];
+			if (recs.length) {
+				const message = `추천 성분/제품: ${recs.join(', ')}`;
+				if (!seenMessages.has(message)) {
+					seenMessages.add(message);
+					info.push({
+						severity: 'info',
+						title: target ? `${target} 추천` : '추천',
+						message,
+						related: [],
+					});
+				}
+			}
+
+			const caution = String(guide.caution ?? '').trim();
+			if (caution && !seenMessages.has(caution)) {
+				seenMessages.add(caution);
+				cautions.push({
+					severity: 'caution',
+					title: target ? `${target} 주의` : '주의',
+					message: caution,
+					related: [],
+				});
+			}
+		}
+	}
+
 	return { warnings, cautions, info, ingredientsByDrug, inferredByDrug };
 }

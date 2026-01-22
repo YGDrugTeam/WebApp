@@ -10,7 +10,10 @@ from typing import Any, Dict, List, Tuple
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
-from mfds_openapi import MFDSOpenAPIClient, MFDSService, normalize_drug_item, save_json
+try:
+    from backend.mfds_openapi import MFDSOpenAPIClient, MFDSService, normalize_drug_item, save_json
+except Exception:  # pragma: no cover
+    from mfds_openapi import MFDSOpenAPIClient, MFDSService, normalize_drug_item, save_json
 
 
 DEFAULT_SERVICE_PATHS = {

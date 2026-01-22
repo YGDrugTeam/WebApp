@@ -21,8 +21,10 @@ function App() {
     const [aiReport, setAiReport] = useState('');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [cameraRecommendations, setCameraRecommendations] = useState([]);
+    const [cameraOcrInfo, setCameraOcrInfo] = useState({ merged: '', box: '', pill: '', debug: [] });
     const [voiceGender, setVoiceGender] = useState('female');
-    const [ageGroup, setAgeGroup] = useState('');
+    const [ageYears, setAgeYears] = useState('');
+    const [extraProfileTags, setExtraProfileTags] = useState([]); // e.g. ['student']
     const [pendingRecommendation, setPendingRecommendation] = useState(null);
     const [pendingRecommendationText, setPendingRecommendationText] = useState('');
     const [durInteractions, setDurInteractions] = useState({ warnings: [], cautions: [], info: [] });
@@ -61,6 +63,12 @@ function App() {
     };
 
     const handleDetectedFromCamera = (payload) => {
+        const mergedText = String(payload?.ocr_text ?? '');
+        const boxText = String(payload?.ocr_text_box ?? '');
+        const pillText = String(payload?.ocr_text_pill ?? '');
+        const debugAttempts = Array.isArray(payload?.ocr_debug) ? payload.ocr_debug : [];
+        setCameraOcrInfo({ merged: mergedText, box: boxText, pill: pillText, debug: debugAttempts });
+
         const top = Array.isArray(payload?.top_matches) ? payload.top_matches : [];
         if (top.length > 0) {
             const sorted = [...top].sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0));
@@ -73,7 +81,10 @@ function App() {
 
         const pillName = payload?.pill_name ?? '';
         const ocrText = payload?.ocr_text ?? '';
-        const candidates = extractDrugCandidates([pillName, ocrText].filter(Boolean).join(' '));
+        const ocrBox = payload?.ocr_text_box ?? '';
+        const ocrPill = payload?.ocr_text_pill ?? '';
+        const merged = [pillName, ocrText, ocrBox, ocrPill].filter(Boolean).join(' ');
+        const candidates = extractDrugCandidates(merged);
         const first = candidates[0] ?? pillName;
         if (first) handleAddPill(first);
     };
@@ -99,10 +110,43 @@ function App() {
         }
     }, [pendingRecommendationText]);
 
-    const localInteractions = useMemo(
-        () => checkInteractions(pillList, ageGroup ? { ageGroup } : undefined),
-        [pillList, ageGroup]
-    );
+    const derivedAgeGroup = useMemo(() => {
+        const raw = String(ageYears ?? '').trim();
+        if (!raw) return '';
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0) return '';
+        // Simple, UI-only grouping. If you need different thresholds, change here.
+        if (n <= 6) return 'infant';
+        if (n <= 12) return 'child';
+        if (n <= 18) return 'teen';
+        if (n <= 44) return 'adult';
+        if (n <= 64) return 'middle';
+        return 'senior';
+    }, [ageYears]);
+
+    const derivedAgeLabel = useMemo(() => {
+        const m = {
+            infant: '유아',
+            child: '소아',
+            teen: '청소년',
+            adult: '성인',
+            middle: '중년',
+            senior: '노년',
+        };
+        return derivedAgeGroup ? (m[derivedAgeGroup] || derivedAgeGroup) : '';
+    }, [derivedAgeGroup]);
+
+    const profileTags = useMemo(() => {
+        const tags = Array.isArray(extraProfileTags) ? extraProfileTags : [];
+        return tags.map((t) => String(t ?? '').trim()).filter(Boolean).slice(0, 4);
+    }, [extraProfileTags]);
+
+    const localInteractions = useMemo(() => {
+        const opts = {};
+        if (derivedAgeGroup) opts.ageGroup = derivedAgeGroup;
+        if ((profileTags?.length ?? 0) > 0) opts.profileTags = profileTags;
+        return checkInteractions(pillList, Object.keys(opts).length ? opts : undefined);
+    }, [pillList, derivedAgeGroup, profileTags]);
 
     useEffect(() => {
         let cancelled = false;
@@ -179,7 +223,7 @@ function App() {
                     className="modal-overlay"
                     role="dialog"
                     aria-modal="true"
-                    aria-label="recommendation confirmation"
+                    aria-label="추천 후보 확인"
                     onMouseDown={(e) => {
                         // click outside to close
                         if (e.target === e.currentTarget) {
@@ -268,7 +312,7 @@ function App() {
                         <h3>목소리 설정</h3>
                         <div className="btn-row" style={{ alignItems: 'center' }}>
                             <span style={{ color: '#4A5568' }}>기본 안내 목소리</span>
-                            <div className="segmented" role="group" aria-label="voice gender">
+                            <div className="segmented" role="group" aria-label="목소리 성별">
                                 <button
                                     className={voiceGender === 'female' ? 'active' : ''}
                                     onClick={() => setVoiceGender('female')}
@@ -288,30 +332,217 @@ function App() {
 
                         <div className="btn-row" style={{ alignItems: 'center', marginTop: 10 }}>
                             <span style={{ color: '#4A5568' }}>사용자 프로필(선택)</span>
-                            <select
-                                value={ageGroup}
-                                onChange={(e) => setAgeGroup(e.target.value)}
-                                style={{
-                                    marginLeft: 'auto',
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: '1px solid #E2E8F0',
-                                    background: 'white',
-                                }}
-                                aria-label="age profile"
-                            >
-                                <option value="">선택 안 함</option>
-                                <option value="student">수험생</option>
-                                <option value="senior">어르신</option>
-                            </select>
+                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <label className="meta" htmlFor="age-years" style={{ margin: 0 }}>
+                                    나이
+                                </label>
+                                <input
+                                    id="age-years"
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={130}
+                                    value={ageYears}
+                                    onChange={(e) => setAgeYears(e.target.value)}
+                                    placeholder="예: 35"
+                                    style={{
+                                        width: 110,
+                                        padding: '8px 10px',
+                                        borderRadius: 10,
+                                        border: '1px solid #E2E8F0',
+                                        background: 'white',
+                                    }}
+                                    aria-label="나이(세)"
+                                />
+                                <div className="meta" style={{ minWidth: 64, textAlign: 'right' }}>
+                                    {derivedAgeLabel ? derivedAgeLabel : '미설정'}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setAgeYears('')}
+                                    className="subtle"
+                                    style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white' }}
+                                    aria-label="나이 지우기"
+                                >
+                                    지우기
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="btn-row" style={{ alignItems: 'center', marginTop: 10 }}>
+                            <span style={{ color: '#4A5568' }}>추가 프로필(선택)</span>
+                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('student')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('student');
+                                                else next.delete('student');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="수험생 프로필 선택"
+                                    />
+                                    수험생
+                                </label>
+
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('pregnant')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('pregnant');
+                                                else next.delete('pregnant');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="임신 프로필 선택"
+                                    />
+                                    임신
+                                </label>
+
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('lactation')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('lactation');
+                                                else next.delete('lactation');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="수유 프로필 선택"
+                                    />
+                                    수유
+                                </label>
+
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('liver')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('liver');
+                                                else next.delete('liver');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="간질환 프로필 선택"
+                                    />
+                                    간질환
+                                </label>
+
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('kidney')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('kidney');
+                                                else next.delete('kidney');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="신장질환 프로필 선택"
+                                    />
+                                    신장질환
+                                </label>
+
+                                <label className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={profileTags.includes('allergy')}
+                                        onChange={(e) => {
+                                            const checked = Boolean(e.target.checked);
+                                            setExtraProfileTags((prev) => {
+                                                const cur = Array.isArray(prev) ? prev : [];
+                                                const next = new Set(cur.map((x) => String(x)));
+                                                if (checked) next.add('allergy');
+                                                else next.delete('allergy');
+                                                return Array.from(next);
+                                            });
+                                        }}
+                                        aria-label="알레르기 프로필 선택"
+                                    />
+                                    알레르기
+                                </label>
+                            </div>
                         </div>
                     </div>
 
                     <CameraCapture onPillDetected={handleDetectedFromCamera} />
 
+                    {(cameraOcrInfo.merged || cameraOcrInfo.box || cameraOcrInfo.pill || (cameraOcrInfo.debug?.length ?? 0) > 0) && (
+                        <section className="card" style={{ marginTop: 12 }}>
+                            <h3 style={{ marginBottom: 8 }}>OCR 디버그</h3>
+                            <div style={{ display: 'grid', gap: 8 }}>
+                                {cameraOcrInfo.box && (
+                                    <div>
+                                        <div style={{ fontWeight: 800 }}>상자/라벨</div>
+                                        <div style={{ fontSize: 13, color: '#2D3748', whiteSpace: 'pre-wrap' }}>{cameraOcrInfo.box}</div>
+                                    </div>
+                                )}
+                                {cameraOcrInfo.pill && (
+                                    <div>
+                                        <div style={{ fontWeight: 800 }}>알약 각인</div>
+                                        <div style={{ fontSize: 13, color: '#2D3748', whiteSpace: 'pre-wrap' }}>{cameraOcrInfo.pill}</div>
+                                    </div>
+                                )}
+                                {cameraOcrInfo.merged && (
+                                    <details>
+                                        <summary style={{ cursor: 'pointer', fontWeight: 800 }}>병합 텍스트(자동 후보 생성에 사용)</summary>
+                                        <div style={{ marginTop: 6, fontSize: 13, color: '#2D3748', whiteSpace: 'pre-wrap' }}>{cameraOcrInfo.merged}</div>
+                                    </details>
+                                )}
+                                {(cameraOcrInfo.debug?.length ?? 0) > 0 && (
+                                    <details>
+                                        <summary style={{ cursor: 'pointer', fontWeight: 800 }}>상위 OCR 시도</summary>
+                                        <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                                            {cameraOcrInfo.debug.slice(0, 8).map((a, idx) => (
+                                                <div
+                                                    key={`${a.region}-${a.variant}-${idx}`}
+                                                    style={{ padding: 10, border: '1px solid #EDF2F7', borderRadius: 10, background: '#F7FAFC' }}
+                                                >
+                                                    <div style={{ fontWeight: 800 }}>
+                                                        {a.region} / {a.variant}
+                                                        <span style={{ marginLeft: 8, color: '#4A5568', fontWeight: 700 }}>
+                                                            점수: {Number(a.score ?? 0).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ fontSize: 13, color: '#2D3748', whiteSpace: 'pre-wrap' }}>
+                                                        {String(a.text ?? '').trim() || '(없음)'}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </details>
+                                )}
+                            </div>
+                        </section>
+                    )}
+
                     {cameraRecommendations.length > 0 && (
                         <section className="card">
-                            <h3>사진 분석 추천 (Top 3)</h3>
+                            <h3>사진 분석 추천 (상위 3)</h3>
                             {cameraRecommendations.some((r) => Boolean(r?.matched)) ? (
                                 <p style={{ marginTop: 0, color: '#4A5568' }}>
                                     DB에 매칭된 후보만 우선 보여드려요. 하나를 선택해 리스트에 추가하세요.
@@ -359,7 +590,7 @@ function App() {
                     <div className="card">
                         <h3>약 추가</h3>
                         <DrugInput onAdd={handleAddPill} />
-                        <RagAssistant />
+                        <RagAssistant ageGroup={derivedAgeGroup} ageYears={ageYears} profileTags={profileTags} />
                     </div>
 
                     <section className="card">

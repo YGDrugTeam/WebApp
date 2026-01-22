@@ -58,7 +58,17 @@ export const ragQuery = async (query, options = {}) => {
     const q = String(query ?? '').trim();
     if (!q) return { ok: false, error: 'rag_query_missing', detail: 'query is required' };
     const k = typeof options?.k === 'number' ? options.k : 5;
-    const res = await api.post('/rag/query', { query: q, k });
+    const payload = { query: q, k };
+    if (Array.isArray(options?.drugNames) && options.drugNames.length > 0) {
+        payload.drug_names = options.drugNames;
+    }
+    if (typeof options?.useTools === 'boolean') {
+        payload.use_tools = options.useTools;
+    }
+    if (typeof options?.mfdsScanPages === 'number' && Number.isFinite(options.mfdsScanPages)) {
+        payload.mfds_scan_pages = options.mfdsScanPages;
+    }
+    const res = await api.post('/rag/query', payload);
     return res.data;
 };
 

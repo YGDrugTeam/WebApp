@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import os
 import tempfile
+import re
 
 try:
     from dotenv import load_dotenv
@@ -98,6 +99,12 @@ class DurCheckRequest(BaseModel):
 class RagQueryRequest(BaseModel):
     query: str
     k: int | None = 5
+    # Optional: hint drug names to query official tools (MFDS/DUR).
+    drug_names: List[str] | None = None
+    # Default True: when keys are configured, include MFDS/DUR evidence.
+    use_tools: bool | None = True
+    # MFDS local scan pages (for endpoints that don't filter reliably)
+    mfds_scan_pages: int | None = None
 
 
 class RagIndexRequest(BaseModel):
@@ -418,8 +425,193 @@ async def rag_query(req: RagQueryRequest):
     k = req.k if isinstance(req.k, int) else 5
     k = max(1, min(10, k))
 
+    def _extract_drug_candidates(qtext: str) -> list[str]:
+        s = re.sub(r"\s+", " ", (qtext or "").strip())
+        if not s:
+            return []
+        # Very small stopword list to avoid treating intent words as drug names.
+        stop = {
+            "주의", "주의사항", "부작용", "상호작용", "병용", "금기", "복용", "용법", "용량", "효능", "효과",
+            "먹어", "먹으면", "같이", "함께", "동시", "중복", "가능", "되나", "되나요", "어때",
+        }
+        tokens = [t for t in re.split(r"[^0-9a-zA-Z가-힣.+]+", s) if t]
+        out: list[str] = []
+        for t in tokens:
+            tl = t.strip().lower()
+            if not tl or tl in stop:
+                continue
+            # Ignore single-letter tokens
+            if len(t) < 2:
+                continue
+            out.append(t.strip())
+        # De-dup preserving order
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for x in out:
+            key = x.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq.append(x)
+        return uniq[:5]
+
+    async def _tool_evidence(qtext: str) -> tuple[list[dict], list[str]]:
+        """Return (evidence, tool_notes). Evidence items follow the RAG evidence schema."""
+
+        notes: list[str] = []
+        ev: list[dict] = []
+
+        if req.use_tools is False:
+            return ([], [])
+
+        # Prefer explicit drug_names, else extract from query.
+        drug_names = [str(x or "").strip() for x in (req.drug_names or [])]
+        drug_names = [x for x in drug_names if x]
+        if not drug_names:
+            drug_names = _extract_drug_candidates(qtext)
+
+        # --- MFDS evidence (single-drug facts) ---
+        try:
+            client = _get_mfds_client()
+            if client is None:
+                notes.append("MFDS 미구성: MFDS_SERVICE_KEY 없음")
+            else:
+                service = _get_mfds_service()
+                search_param = _get_mfds_search_param()
+                scan_pages = int(req.mfds_scan_pages or 30)
+                scan_pages = max(1, min(scan_pages, 200))
+
+                for name in drug_names[:2]:
+                    qn = name.strip().lower()
+                    matches: list[dict] = []
+
+                    # Local scan with substring filter (same strategy as /mfds/search)
+                    for raw in client.iter_items(
+                        service,
+                        limit=scan_pages * 100,
+                        rows=100,
+                        extra_params={},
+                        max_pages=scan_pages,
+                    ):
+                        norm = normalize_drug_item(raw)
+                        item_name = str(norm.get("itemName") or "").strip()
+                        if not item_name:
+                            continue
+                        if qn not in item_name.lower():
+                            continue
+                        matches.append(norm)
+                        if len(matches) >= 3:
+                            break
+
+                    for m in matches[:2]:
+                        item_name = str(m.get("itemName") or "").strip()
+                        item_seq = str(m.get("itemSeq") or "").strip()
+                        chunks: list[str] = []
+                        for label, key in [
+                            ("경고", "warn"),
+                            ("주의", "caution"),
+                            ("상호작용", "interaction"),
+                            ("부작용", "sideEffect"),
+                            ("용법", "useMethod"),
+                            ("효능", "efcy"),
+                        ]:
+                            v = str(m.get(key) or "").strip()
+                            if v:
+                                chunks.append(f"{label}: {v}")
+                        snippet = "\n".join(chunks).strip()
+                        if snippet:
+                            ev.append(
+                                {
+                                    "source": "MFDS",
+                                    "id": item_seq or item_name,
+                                    "field": "MFDS:DrbEasyDrugInfoService",
+                                    "snippet": f"[{item_name}]\n{snippet}"[:800],
+                                }
+                            )
+        except Exception as e:
+            notes.append(f"MFDS 조회 실패: {type(e).__name__}")
+
+        # --- DUR evidence (pairwise contraindication) ---
+        try:
+            if len(drug_names) >= 2:
+                dur_payload = DurCheckRequest(drug_names=drug_names[:5])
+                dur_res = await dur_check(dur_payload)
+                if isinstance(dur_res, Response):
+                    notes.append("DUR 조회 실패(서버 응답 오류)")
+                elif isinstance(dur_res, dict):
+                    warnings = dur_res.get("warnings") if isinstance(dur_res.get("warnings"), list) else []
+                    for w in warnings[:5]:
+                        if not isinstance(w, dict):
+                            continue
+                        msg = str(w.get("message") or "").strip()
+                        related = w.get("related") if isinstance(w.get("related"), list) else []
+                        rel = ", ".join([str(x) for x in related if str(x or "").strip()])
+                        sn = msg or (f"병용금기 의심: {rel}" if rel else "병용금기")
+                        ev.append(
+                            {
+                                "source": "DUR",
+                                "id": "dur",
+                                "field": "DUR:병용금기",
+                                "snippet": sn[:600],
+                            }
+                        )
+            else:
+                notes.append("DUR 스킵: 약 2개 이상 필요")
+        except Exception as e:
+            notes.append(f"DUR 조회 실패: {type(e).__name__}")
+
+        return (ev, notes)
+
     try:
-        return _RAG.answer(q, k=k)
+        base = _RAG.answer(q, k=k)
+
+        tool_ev, tool_notes = await _tool_evidence(q)
+
+        # Merge evidence with official-first ordering
+        base_ev = base.get("evidence") if isinstance(base, dict) and isinstance(base.get("evidence"), list) else []
+        merged_ev = list(tool_ev) + [x for x in base_ev if isinstance(x, dict)]
+
+        # Upgrade safety_level only with explicit official evidence
+        safety_level = str(base.get("safety_level") or "unknown") if isinstance(base, dict) else "unknown"
+        joined_tools = "\n".join([str(x.get("snippet") or "") for x in tool_ev]).lower()
+        if "병용금기" in joined_tools or "contraind" in joined_tools:
+            safety_level = "avoid"
+        elif any(x in joined_tools for x in ["경고:", "주의:", "주의사항"]):
+            if safety_level != "avoid":
+                safety_level = "caution"
+
+        # Build an answer that *only* lists evidence snippets.
+        lines: list[str] = []
+        if tool_ev:
+            lines.append("[공식 근거(MFDS/DUR)]")
+            for x in tool_ev[:3]:
+                lines.append(f"- {str(x.get('snippet') or '').strip()}")
+        if base_ev:
+            lines.append("[로컬 지식베이스(RAG)]")
+            for x in base_ev[:3]:
+                if isinstance(x, dict):
+                    lines.append(f"- {str(x.get('snippet') or '').strip()}")
+
+        # Preserve questions_needed if base had none but tools indicate missing info.
+        questions_needed = base.get("questions_needed") if isinstance(base, dict) else []
+        if (not questions_needed) and (not tool_ev) and tool_notes:
+            questions_needed = base.get("questions_needed") if isinstance(base.get("questions_needed"), list) else []
+
+        not_in_context = []
+        if isinstance(base, dict) and isinstance(base.get("not_in_context"), list):
+            not_in_context.extend([str(x) for x in base.get("not_in_context")])
+        if tool_notes:
+            not_in_context.extend([f"tools: {n}" for n in tool_notes])
+
+        return {
+            "ok": True,
+            "answer": "\n".join([l for l in lines if l]).strip() or str(base.get("answer") or ""),
+            "safety_level": safety_level,
+            "key_points": base.get("key_points") if isinstance(base, dict) and isinstance(base.get("key_points"), list) else [],
+            "questions_needed": questions_needed if isinstance(questions_needed, list) else [],
+            "evidence": merged_ev,
+            "not_in_context": not_in_context,
+        }
     except Exception as e:
         return _json_error("rag_query_error", f"{type(e).__name__}: {e}", status_code=500)
 

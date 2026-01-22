@@ -261,7 +261,16 @@ async def mfds_search(q: str = Query(min_length=1), limit: int = Query(20, ge=1,
         simplified = [x for x in simplified if x.get("itemName")]
         return {"status": "ok", "q": q, "count": len(simplified), "items": simplified}
     except MFDSOpenAPIError as e:
-        return _json_error("mfds_openapi_error", str(e), status_code=502)
+        msg = str(e)
+        if "HTTP 403" in msg or "403" in msg and "Forbidden" in msg:
+            return _json_error(
+                "mfds_forbidden",
+                "MFDS OpenAPI returned 403 Forbidden. This usually means your service key is not approved for this dataset, or the endpoint path is not the one you applied for. "
+                "Check: (1) data.go.kr에서 해당 MFDS API를 '활용신청' 했는지, (2) MFDS_SERVICE_KEY가 맞는지(가능하면 'Decoding' 키 사용), "
+                "(3) MFDS_SERVICE_PATH가 신청한 API의 요청주소와 일치하는지.",
+                status_code=502,
+            )
+        return _json_error("mfds_openapi_error", msg, status_code=502)
     except Exception as e:
         return _json_error("mfds_unknown_error", f"{type(e).__name__}: {e}", status_code=500)
 
@@ -296,7 +305,14 @@ async def mfds_drugs(limit: int = Query(300, ge=1, le=500)):
         simplified = [x for x in simplified if x.get("itemName")]
         return {"status": "ok", "count": len(simplified), "items": simplified}
     except MFDSOpenAPIError as e:
-        return _json_error("mfds_openapi_error", str(e), status_code=502)
+        msg = str(e)
+        if "HTTP 403" in msg or "403" in msg and "Forbidden" in msg:
+            return _json_error(
+                "mfds_forbidden",
+                "MFDS OpenAPI returned 403 Forbidden. Check service key approval and MFDS_SERVICE_PATH configuration.",
+                status_code=502,
+            )
+        return _json_error("mfds_openapi_error", msg, status_code=502)
     except Exception as e:
         return _json_error("mfds_unknown_error", f"{type(e).__name__}: {e}", status_code=500)
 

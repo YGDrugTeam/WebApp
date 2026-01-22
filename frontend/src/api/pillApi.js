@@ -67,3 +67,8 @@ export const ragIndex = async (options = {}) => {
     const res = await api.post('/rag/index', { save });
     return res.data;
 };
+
+export const ragPrompt = async () => {
+    const res = await api.get('/rag/prompt');
+    return res.data;
+};

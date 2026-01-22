@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -47,17 +48,80 @@ class RagService:
 
     def answer(self, query: str, *, k: int = 5) -> Dict[str, Any]:
         self.ensure_loaded()
-        contexts = self._index.query(query, k=k)
+        raw_contexts = self._index.query(query, k=k)
 
-        # No LLM wired yet: return a deterministic, UI-ready response.
-        if not contexts:
+        def _snippet(text: str, *, limit: int = 280) -> str:
+            s = re.sub(r"\s+", " ", (text or "").strip())
+            if len(s) <= limit:
+                return s
+            return s[: max(0, limit - 1)] + "…"
+
+        def _clarifying_questions(q: str) -> List[str]:
+            q = (q or "").strip()
+            # Keep this short: too many questions reduces usability.
+            return [
+                "확인할 약의 정확한 제품명(또는 성분명)과 함량/제형(예: 500mg 정)까지 알려줄 수 있나요?",
+                "현재 함께 복용 중인 다른 약/영양제(이름, 가능하면 성분)도 있나요?",
+                "연령대, 임신/수유 여부, 간/신장 질환 또는 알레르기 정보가 있나요?",
+            ]
+
+        # Filter to evidence-worthy contexts (reduce hallucination risk)
+        min_score = float(os.getenv("RAG_MIN_SCORE", "0.12"))
+        contexts = [c for c in raw_contexts if float(c.get("score") or 0) >= min_score]
+
+        evidence = []
+        for c in contexts[: max(1, int(k))]:
+            title = str(c.get("title") or "").strip()
+            text = str(c.get("text") or "").strip()
+            meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
+            src = str(meta.get("source") or "RAG")
+            evidence.append(
+                {
+                    "source": "RAG",
+                    "id": str(c.get("id") or ""),
+                    "field": src,
+                    "snippet": _snippet(f"[{title}] {text}" if title else text),
+                }
+            )
+
+        if not evidence:
             return {
                 "ok": True,
-                "answer": "관련 자료를 찾지 못했어요. 약 이름을 더 구체적으로 입력하거나(예: '타이레놀정 500mg'), 성분명으로도 시도해 주세요.",
-                "contexts": [],
+                "answer": "제공된 지식베이스에서 질문과 직접적으로 매칭되는 근거를 찾지 못해요. 확인 가능한 정보만으로는 단정해서 답변할 수 없습니다.",
+                "safety_level": "unknown",
+                "key_points": ["근거 부족으로 결론을 내릴 수 없음"],
+                "questions_needed": _clarifying_questions(query),
+                "evidence": [],
+                "not_in_context": ["질문에 대한 직접 근거(지식베이스)"],
             }
 
-        # Simple synthesis: surface the best snippet(s)
-        top = contexts[0]
-        answer = f"가장 관련 있는 자료: {top.get('title','')}\n\n{top.get('text','')}"
-        return {"ok": True, "answer": answer, "contexts": contexts}
+        # Conservative synthesis: only summarize what appears in evidence snippets.
+        key_points = []
+        for ev in evidence[:3]:
+            sn = str(ev.get("snippet") or "").strip()
+            if sn:
+                key_points.append(_snippet(sn, limit=120))
+
+        # Map to a conservative safety level when the KB explicitly contains interaction severity.
+        safety_level = "unknown"
+        joined = "\n".join([str(ev.get("snippet") or "") for ev in evidence]).lower()
+        if any(x in joined for x in ["병용 금기", "금기", "contraind"]):
+            safety_level = "avoid"
+        elif any(x in joined for x in ["주의", "caution", "중요도: high", "severity: high", "중요도: medium"]):
+            safety_level = "caution"
+
+        answer_lines = [
+            "아래 내용은 제공된 지식베이스의 근거에서 확인되는 정보만 요약합니다.",
+        ]
+        for ev in evidence[:3]:
+            answer_lines.append(f"- {ev.get('snippet','')}")
+
+        return {
+            "ok": True,
+            "answer": "\n".join(answer_lines).strip(),
+            "safety_level": safety_level,
+            "key_points": key_points,
+            "questions_needed": [],
+            "evidence": evidence,
+            "not_in_context": [],
+        }

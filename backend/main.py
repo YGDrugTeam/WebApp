@@ -55,6 +55,7 @@ from odcloud_openapi import (
 )
 
 from rag_agent.service import RagService
+from rag_agent.prompt_templates import rag_prompt_bundle
 
 app = FastAPI()
 
@@ -421,6 +422,16 @@ async def rag_query(req: RagQueryRequest):
         return _RAG.answer(q, k=k)
     except Exception as e:
         return _json_error("rag_query_error", f"{type(e).__name__}: {e}", status_code=500)
+
+
+@app.get("/rag/prompt")
+async def rag_prompt():
+    """Return strict prompt templates to reduce hallucination when wiring an LLM."""
+
+    try:
+        return rag_prompt_bundle()
+    except Exception as e:
+        return _json_error("rag_prompt_error", f"{type(e).__name__}: {e}", status_code=500)
 
 
 @app.get("/mfds/search")

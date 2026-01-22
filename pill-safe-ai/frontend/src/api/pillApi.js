@@ -61,3 +61,9 @@ export const ragQuery = async (query, options = {}) => {
     const res = await api.post('/rag/query', { query: q, k });
     return res.data;
 };
+
+export const ragIndex = async (options = {}) => {
+    const save = options?.save !== false;
+    const res = await api.post('/rag/index', { save });
+    return res.data;
+};

@@ -6,6 +6,7 @@ import DrugListDisplay from './components/DrugListDisplay';
 import DangerCard from './components/DangerCard';
 import AnalysisReport from './components/AnalysisReport';
 import VoiceGuidePlayer from './components/VoiceGuidePlayer';
+import RagAssistant from './components/RagAssistant';
 import { checkDur, checkSafety } from './api/pillApi';
 import useSpeechSynthesis from './hooks/useSpeechSynthesis';
 import { extractDrugCandidates } from './utils/ocrProcessor';
@@ -358,6 +359,7 @@ function App() {
                     <div className="card">
                         <h3>약 추가</h3>
                         <DrugInput onAdd={handleAddPill} />
+                        <RagAssistant />
                     </div>
 
                     <section className="card">

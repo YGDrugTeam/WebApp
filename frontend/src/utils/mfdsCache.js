@@ -45,6 +45,15 @@ export function getMfdsCachedDrugs() {
 	return readCache().items;
 }
 
+export function clearMfdsCache() {
+	if (typeof window === 'undefined' || !window.localStorage) return;
+	try {
+		window.localStorage.removeItem(STORAGE_KEY);
+	} catch {
+		// ignore
+	}
+}
+
 export function upsertMfdsDrugs(rawItems) {
 	const incoming = Array.isArray(rawItems) ? rawItems : [];
 	if (incoming.length === 0) return;
@@ -68,6 +77,7 @@ export function upsertMfdsDrugs(rawItems) {
 		const name = String(it?.itemName ?? '').trim();
 		const key = normalize(name);
 		if (!key) continue;
+		map.delete(key);
 		map.set(key, {
 			itemName: name,
 			entpName: String(it?.entpName ?? '').trim(),
@@ -76,6 +86,6 @@ export function upsertMfdsDrugs(rawItems) {
 	}
 
 	// newest first
-	const merged = Array.from(map.values());
+	const merged = Array.from(map.values()).reverse();
 	writeCache(merged);
 }

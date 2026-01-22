@@ -1,12 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { searchMfdsDrugs } from '../api/pillApi';
-import { upsertMfdsDrugs } from '../utils/mfdsCache';
+import { clearMfdsCache, getMfdsCachedDrugs, upsertMfdsDrugs } from '../utils/mfdsCache';
 
 function DrugInput({ onAdd }) {
     const [inputValue, setInputValue] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [searchError, setSearchError] = useState('');
     const [mfdsResults, setMfdsResults] = useState([]);
+    const [cachedMfds, setCachedMfds] = useState([]);
+    const [showCached, setShowCached] = useState(true);
+
+    useEffect(() => {
+        setCachedMfds(getMfdsCachedDrugs());
+    }, []);
 
     const handleSubmit = () => {
         if (inputValue.trim()) {
@@ -31,7 +37,10 @@ function DrugInput({ onAdd }) {
             }
             const items = Array.isArray(data?.items) ? data.items : [];
             setMfdsResults(items);
-            if (items.length > 0) upsertMfdsDrugs(items);
+            if (items.length > 0) {
+                upsertMfdsDrugs(items);
+                setCachedMfds(getMfdsCachedDrugs());
+            }
             if (items.length === 0) setSearchError('검색 결과가 없습니다.');
         } catch (e) {
             setMfdsResults([]);
@@ -61,7 +70,61 @@ function DrugInput({ onAdd }) {
                 <button type="button" onClick={handleMfdsSearch} disabled={!canSearch || isSearching}>
                     {isSearching ? '검색 중…' : 'MFDS 검색'}
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setShowCached((v) => !v)}
+                    style={{ marginLeft: 'auto' }}
+                >
+                    {showCached ? '최근 저장 숨기기' : '최근 저장 보기'}
+                </button>
             </div>
+
+            {showCached && cachedMfds.length > 0 && (
+                <div style={{ marginTop: 10, padding: 10, border: '1px solid #E2E8F0', borderRadius: 10, background: 'white' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontWeight: 800 }}>최근 저장된 MFDS 약</div>
+                        <span style={{ fontSize: 12, color: '#718096' }}>(로컬 캐시)</span>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                clearMfdsCache();
+                                setCachedMfds([]);
+                            }}
+                            style={{ marginLeft: 'auto' }}
+                        >
+                            캐시 비우기
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                        {cachedMfds.slice(0, 8).map((item) => {
+                            const name = String(item?.itemName ?? '').trim();
+                            const entp = String(item?.entpName ?? '').trim();
+                            const seq = String(item?.itemSeq ?? '').trim();
+                            if (!name) return null;
+                            return (
+                                <button
+                                    key={`cached-${seq || name}-${entp}`}
+                                    type="button"
+                                    onClick={() => onAdd(name)}
+                                    style={{
+                                        textAlign: 'left',
+                                        padding: '10px 12px',
+                                        borderRadius: 10,
+                                        border: '1px solid #EDF2F7',
+                                        background: '#F7FAFC',
+                                        cursor: 'pointer',
+                                    }}
+                                    title={seq ? `품목기준코드: ${seq}` : ''}
+                                >
+                                    <div style={{ fontWeight: 900 }}>{name}</div>
+                                    {entp && <div style={{ fontSize: 12, color: '#4A5568' }}>{entp}</div>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {searchError && (
                 <div style={{ marginTop: 8, color: '#B83280', fontSize: 13 }}>

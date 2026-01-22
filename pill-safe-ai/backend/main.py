@@ -367,13 +367,25 @@ async def gpu_status():
         cuda_available = bool(torch.cuda.is_available())
         device_count = int(torch.cuda.device_count()) if cuda_available else 0
         device_name = torch.cuda.get_device_name(0) if cuda_available and device_count > 0 else None
+
+        cuda_usable = False
+        if cuda_available and device_count > 0:
+            try:
+                x = torch.randn((1,), device="cuda")
+                y = x * 2
+                _ = float(y.sum().item())
+                cuda_usable = True
+            except Exception:
+                cuda_usable = False
     except Exception:
         cuda_available = False
         device_count = 0
         device_name = None
+        cuda_usable = False
 
     return {
         "cudaAvailable": cuda_available,
+        "cudaUsable": cuda_usable,
         "cudaDeviceCount": device_count,
         "cudaDeviceName": device_name,
         "ocr": {"gpu": bool(OCR_GPU_ENABLED), "reason": str(OCR_GPU_REASON)},

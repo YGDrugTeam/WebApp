@@ -20,17 +20,28 @@ def _bool_env(name: str) -> bool | None:
 
 def _detect_ocr_gpu() -> tuple[bool, str]:
     forced = _bool_env("OCR_USE_GPU")
-    if forced is True:
-        return True, "forced_by_env"
     if forced is False:
         return False, "disabled_by_env"
 
     if torch is None:
         return False, "torch_not_available"
+
     try:
-        if bool(torch.cuda.is_available()):
-            return True, "cuda_available"
-        return False, "cuda_not_available"
+        if not bool(torch.cuda.is_available()):
+            return False, "cuda_not_available"
+
+        # Some setups report CUDA as available, but kernels cannot actually run
+        # (e.g., GPU compute capability not supported by the installed wheel).
+        try:
+            x = torch.randn((1,), device="cuda")
+            y = x * 2
+            _ = float(y.sum().item())
+        except Exception:
+            if forced is True:
+                return False, "forced_but_cuda_unusable"
+            return False, "cuda_unusable"
+
+        return True, "cuda_available" if forced is None else "forced_by_env"
     except Exception:
         return False, "cuda_check_failed"
 

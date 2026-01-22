@@ -1,5 +1,6 @@
 import drugDatabase from '../data/drugDatabase.json';
 import medicalKnowledge from '../data/medicalKnowledge.json';
+import { getMfdsCachedDrugs } from './mfdsCache';
 
 function normalize(value) {
 	return String(value ?? '')
@@ -99,6 +100,32 @@ export function matchDrug(rawText) {
 		if (score > bestScore) {
 			bestScore = score;
 			best = drug;
+		}
+	}
+
+	// If local DB match is weak, try MFDS cached names (from previous searches)
+	if (!best || bestScore < 60) {
+		const mfdsItems = getMfdsCachedDrugs();
+		let mfdsBest = null;
+		let mfdsBestScore = 0;
+		for (const it of mfdsItems) {
+			const name = String(it?.itemName ?? '').trim();
+			if (!name) continue;
+			const s = scoreMatch(q, normalize(name));
+			if (s > mfdsBestScore) {
+				mfdsBestScore = s;
+				mfdsBest = it;
+			}
+		}
+
+		if (mfdsBest && mfdsBestScore >= 70) {
+			return {
+				canonicalName: String(mfdsBest.itemName ?? rawText).trim(),
+				matched: true,
+				score: mfdsBestScore,
+				drug: null,
+				inferred: { source: 'mfdsCache', entpName: mfdsBest.entpName, itemSeq: mfdsBest.itemSeq },
+			};
 		}
 	}
 

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { searchMfdsDrugs } from '../api/pillApi';
+import { upsertMfdsDrugs } from '../utils/mfdsCache';
 
 function DrugInput({ onAdd }) {
     const [inputValue, setInputValue] = useState('');
@@ -30,6 +31,7 @@ function DrugInput({ onAdd }) {
             }
             const items = Array.isArray(data?.items) ? data.items : [];
             setMfdsResults(items);
+            if (items.length > 0) upsertMfdsDrugs(items);
             if (items.length === 0) setSearchError('검색 결과가 없습니다.');
         } catch (e) {
             setMfdsResults([]);

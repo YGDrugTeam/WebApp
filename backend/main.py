@@ -40,7 +40,7 @@ try:
 except Exception:  # pragma: no cover
     speechsdk = None
 
-from model import ocr_reader
+from model import ocr_reader, OCR_GPU_ENABLED, OCR_GPU_REASON
 from matcher import extract_candidates, match_drug
 from mfds_openapi import MFDSOpenAPIClient, MFDSService, MFDSOpenAPIError, normalize_drug_item
 from odcloud_openapi import (
@@ -355,6 +355,29 @@ async def analyze_safety(request: PillListRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/gpu/status")
+async def gpu_status():
+    """Diagnostics for CUDA/GPU availability."""
+
+    try:
+        import torch  # type: ignore
+
+        cuda_available = bool(torch.cuda.is_available())
+        device_count = int(torch.cuda.device_count()) if cuda_available else 0
+        device_name = torch.cuda.get_device_name(0) if cuda_available and device_count > 0 else None
+    except Exception:
+        cuda_available = False
+        device_count = 0
+        device_name = None
+
+    return {
+        "cudaAvailable": cuda_available,
+        "cudaDeviceCount": device_count,
+        "cudaDeviceName": device_name,
+        "ocr": {"gpu": bool(OCR_GPU_ENABLED), "reason": str(OCR_GPU_REASON)},
+    }
 
 
 @app.post("/rag/index")

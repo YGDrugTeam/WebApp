@@ -7,6 +7,8 @@
 
 ## 1) 업로드(권장: ZIP 번들)
 
+콜랩에서 바로 실행 가능한 템플릿 노트북: [colab/PillSafeAI_Colab_Template.ipynb](colab/PillSafeAI_Colab_Template.ipynb)
+
 로컬에서 ZIP 만들기:
 
 ```powershell

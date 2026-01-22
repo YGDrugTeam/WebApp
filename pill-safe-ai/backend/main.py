@@ -48,6 +48,7 @@ from odcloud_openapi import (
     ODCloudService,
     ODCloudOpenAPIError,
     match_row_to_pair,
+    match_row_to_pair_ingredients,
     row_product_names,
     row_product_codes,
     row_reason,
@@ -80,9 +81,43 @@ class DurCheckRequest(BaseModel):
     # Optional richer input with codes for exact matching.
     # For MFDS e약은요, itemSeq is a good candidate to try as a product code.
     drugs: List[dict] | None = None
+
+    # Optional: inferred active ingredients per drug name (from frontend/local DB).
+    # { "타이레놀": ["아세트아미노펜"], ... }
+    ingredients_by_drug: dict | None = None
     scan_limit: int | None = None
     per_page: int | None = None
     max_pages: int | None = None
+
+
+_DUR_ROWS_CACHE: dict[str, object] = {"key": "", "ts": 0.0, "rows": []}
+
+
+def _get_cached_dur_rows(cache_key: str, ttl_s: float) -> list[dict] | None:
+    import time
+
+    try:
+        key = _DUR_ROWS_CACHE.get("key")
+        if not isinstance(key, str) or key != cache_key:
+            return None
+        ts_raw = _DUR_ROWS_CACHE.get("ts")
+        ts = ts_raw if isinstance(ts_raw, (int, float)) else 0.0
+        if time.time() - ts > ttl_s:
+            return None
+        rows = _DUR_ROWS_CACHE.get("rows")
+        if isinstance(rows, list):
+            return rows
+    except Exception:
+        return None
+    return None
+
+
+def _set_cached_dur_rows(cache_key: str, rows: list[dict]) -> None:
+    import time
+
+    _DUR_ROWS_CACHE["key"] = cache_key
+    _DUR_ROWS_CACHE["ts"] = time.time()
+    _DUR_ROWS_CACHE["rows"] = rows
 
 
 VOICE_BY_GENDER = {
@@ -534,13 +569,22 @@ async def dur_check(payload: DurCheckRequest):
     max_pages = int(payload.max_pages or 80)
     max_pages = max(1, min(max_pages, 500))
 
-    # Pairwise matching against scanned rows
+    ingredients_by_drug = payload.ingredients_by_drug if isinstance(payload.ingredients_by_drug, dict) else {}
+
+    # Pairwise matching against scanned rows (cached)
     warnings: list[dict] = []
     seen_pairs: set[tuple[str, str]] = set()
 
     try:
-        rows = client.iter_rows(service, limit=scan_limit, per_page=per_page, max_pages=max_pages)
-        for row in rows:
+        ttl_s = float(os.getenv("DUR_CACHE_TTL_S", "3600") or "3600")
+        cache_key = f"{service.service_path}|{scan_limit}|{per_page}|{max_pages}"
+
+        cached = _get_cached_dur_rows(cache_key, ttl_s)
+        if cached is None:
+            cached = client.fetch_rows(service, limit=scan_limit, per_page=per_page, max_pages=max_pages)
+            _set_cached_dur_rows(cache_key, cached)
+
+        for row in cached:
             a, b = row_product_names(row)
             if not a or not b:
                 continue
@@ -559,7 +603,24 @@ async def dur_check(payload: DurCheckRequest):
                     if key in seen_pairs:
                         continue
 
-                    if match_row_to_pair(row, left, right, left_code=left_code, right_code=right_code):
+                    left_ings = ingredients_by_drug.get(left) if isinstance(ingredients_by_drug.get(left), list) else None
+                    right_ings = ingredients_by_drug.get(right) if isinstance(ingredients_by_drug.get(right), list) else None
+
+                    matched = False
+
+                    # 1) Code-first exact match
+                    if left_code and right_code:
+                        matched = match_row_to_pair(row, left, right, left_code=left_code, right_code=right_code)
+
+                    # 2) Ingredient-based match (more stable than product names)
+                    if not matched and left_ings and right_ings:
+                        matched = match_row_to_pair_ingredients(row, left_ings, right_ings)
+
+                    # 3) Fallback: fuzzy product-name match
+                    if not matched:
+                        matched = match_row_to_pair(row, left, right)
+
+                    if matched:
                         seen_pairs.add(key)
                         reason = row_reason(row)
                         msg = f"{left} + {right} 병용금기" + (f" — {reason}" if reason else "")

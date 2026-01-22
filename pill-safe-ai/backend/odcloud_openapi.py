@@ -198,6 +198,73 @@ def row_reason(row: Dict[str, Any]) -> str:
     return ""
 
 
+def row_ingredient_names(row: Dict[str, Any]) -> Tuple[str | None, str | None]:
+    """Best-effort extraction for ingredient-name pairs in DUR rows."""
+
+    # Common variants across snapshots
+    a = row.get("성분명A") or row.get("성분명1") or row.get("금기성분명")
+    b = row.get("성분명B") or row.get("성분명2") or row.get("대상성분명")
+
+    a = str(a).strip() if a else None
+    b = str(b).strip() if b else None
+    return (a or None, b or None)
+
+
+def row_ingredient_codes(row: Dict[str, Any]) -> Tuple[str | None, str | None]:
+    """Best-effort extraction for ingredient-code pairs in DUR rows."""
+
+    a = row.get("성분코드A") or row.get("성분코드1")
+    b = row.get("성분코드B") or row.get("성분코드2")
+
+    a = str(a).strip() if a else None
+    b = str(b).strip() if b else None
+    return (a or None, b or None)
+
+
+def _normalize_for_match(value: Any) -> str:
+    return normalize_text(value)
+
+
+def match_row_to_pair_ingredients(
+    row: Dict[str, Any],
+    left_ingredients: List[str] | None,
+    right_ingredients: List[str] | None,
+) -> bool:
+    """Try ingredient-based matching: row ingredient A/B vs inferred ingredients."""
+
+    if not left_ingredients or not right_ingredients:
+        return False
+
+    ra_name, rb_name = row_ingredient_names(row)
+    ra_code, rb_code = row_ingredient_codes(row)
+
+    # If the row only has product-level info, ingredient match is not possible.
+    if not (ra_name or rb_name or ra_code or rb_code):
+        return False
+
+    left_norm = [_normalize_for_match(x) for x in left_ingredients if str(x or "").strip()]
+    right_norm = [_normalize_for_match(x) for x in right_ingredients if str(x or "").strip()]
+    left_norm = [x for x in left_norm if x]
+    right_norm = [x for x in right_norm if x]
+    if not left_norm or not right_norm:
+        return False
+
+    # If row provides codes, attempt exact containment (code values are usually stable).
+    if ra_code and rb_code:
+        return (ra_code in left_norm and rb_code in right_norm) or (ra_code in right_norm and rb_code in left_norm)
+
+    # Otherwise match by ingredient names with a high threshold.
+    ra = _normalize_for_match(ra_name) if ra_name else ""
+    rb = _normalize_for_match(rb_name) if rb_name else ""
+    if not ra or not rb:
+        return False
+
+    def has_match(q: str, cands: List[str]) -> bool:
+        return any(score_match(q, t) >= 85 for t in cands)
+
+    return (has_match(ra, left_norm) and has_match(rb, right_norm)) or (has_match(ra, right_norm) and has_match(rb, left_norm))
+
+
 def match_row_to_pair(
     row: Dict[str, Any],
     left: str,

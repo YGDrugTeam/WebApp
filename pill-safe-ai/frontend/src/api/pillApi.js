@@ -53,3 +53,11 @@ export const checkDur = async (drugNames, options = {}) => {
     });
     return res.data;
 };
+
+export const ragQuery = async (query, options = {}) => {
+    const q = String(query ?? '').trim();
+    if (!q) return { ok: false, error: 'rag_query_missing', detail: 'query is required' };
+    const k = typeof options?.k === 'number' ? options.k : 5;
+    const res = await api.post('/rag/query', { query: q, k });
+    return res.data;
+};

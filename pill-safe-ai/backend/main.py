@@ -54,6 +54,8 @@ from odcloud_openapi import (
     row_reason,
 )
 
+from rag_agent.service import RagService
+
 app = FastAPI()
 
 app.add_middleware(
@@ -62,6 +64,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_RAG = RagService()
 
 class PillListRequest(BaseModel):
     pill_list: List[str]
@@ -88,6 +92,15 @@ class DurCheckRequest(BaseModel):
     scan_limit: int | None = None
     per_page: int | None = None
     max_pages: int | None = None
+
+
+class RagQueryRequest(BaseModel):
+    query: str
+    k: int | None = 5
+
+
+class RagIndexRequest(BaseModel):
+    save: bool | None = True
 
 
 _DUR_ROWS_CACHE: dict[str, object] = {"key": "", "ts": 0.0, "rows": []}
@@ -342,6 +355,37 @@ async def analyze_safety(request: PillListRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.post("/rag/index")
+async def rag_index(req: RagIndexRequest):
+    """(Re)build the local RAG index from repo JSON knowledge sources."""
+
+    try:
+        result = _RAG.rebuild(save=bool(req.save) if req.save is not None else True)
+        return {"ok": True, **result}
+    except Exception as e:
+        return _json_error("rag_index_error", f"{type(e).__name__}: {e}", status_code=500)
+
+
+@app.post("/rag/query")
+async def rag_query(req: RagQueryRequest):
+    """Query the local RAG index.
+
+    NOTE: This currently returns a deterministic synthesized answer without calling an LLM.
+    """
+
+    q = str(req.query or "").strip()
+    if not q:
+        return _json_error("rag_query_missing", "query is required", status_code=400)
+
+    k = req.k if isinstance(req.k, int) else 5
+    k = max(1, min(10, k))
+
+    try:
+        return _RAG.answer(q, k=k)
+    except Exception as e:
+        return _json_error("rag_query_error", f"{type(e).__name__}: {e}", status_code=500)
 
 
 @app.get("/mfds/search")

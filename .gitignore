@@ -14,6 +14,10 @@ Thumbs.db
 
 # Local secrets / env
 frontend/.env
+.env
 
 # Generated audio artifacts
 backend/tts_test_*.mp3
+
+# Local data exports
+backend/data/

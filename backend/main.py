@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -22,6 +22,7 @@ except Exception:  # pragma: no cover
 
 from model import ocr_reader
 from matcher import extract_candidates, match_drug
+from mfds_openapi import MFDSOpenAPIClient, MFDSService, MFDSOpenAPIError, normalize_drug_item
 
 app = FastAPI()
 
@@ -70,6 +71,23 @@ def _json_error(error: str, detail: str, status_code: int = 200) -> Response:
         media_type="application/json",
         status_code=status_code,
     )
+
+
+def _get_mfds_client() -> MFDSOpenAPIClient | None:
+    key = os.getenv("MFDS_SERVICE_KEY", "").strip()
+    if not key:
+        return None
+    base = os.getenv("MFDS_API_BASE", "https://apis.data.go.kr").strip() or "https://apis.data.go.kr"
+    return MFDSOpenAPIClient(service_key=key, base_url=base)
+
+
+def _get_mfds_service() -> MFDSService:
+    # Default to a commonly-used MFDS endpoint; override via env if your approved dataset differs.
+    path = os.getenv(
+        "MFDS_SERVICE_PATH",
+        "/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList",
+    ).strip()
+    return MFDSService(service_path=path)
 
 
 async def _synthesize_edge_tts_mp3(text: str, voice: str, rate: str | None, volume: str | None) -> bytes:
@@ -195,6 +213,72 @@ async def analyze_safety(request: PillListRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/mfds/search")
+async def mfds_search(q: str = Query(min_length=1), limit: int = Query(20, ge=1, le=200)):
+    client = _get_mfds_client()
+    if client is None:
+        return _json_error(
+            "mfds_key_missing",
+            "Server is not configured. Set MFDS_SERVICE_KEY (and optionally MFDS_SERVICE_PATH, MFDS_API_BASE).",
+            status_code=503,
+        )
+
+    service = _get_mfds_service()
+    try:
+        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params={"itemName": q})
+        normalized = [normalize_drug_item(x) for x in raw_items]
+        # Drop the bulky raw payload for UI suggestion list by default.
+        simplified = [
+            {
+                "itemName": x.get("itemName"),
+                "entpName": x.get("entpName"),
+                "itemSeq": x.get("itemSeq"),
+            }
+            for x in normalized
+        ]
+        simplified = [x for x in simplified if x.get("itemName")]
+        return {"status": "ok", "q": q, "count": len(simplified), "items": simplified}
+    except MFDSOpenAPIError as e:
+        return _json_error("mfds_openapi_error", str(e), status_code=502)
+    except Exception as e:
+        return _json_error("mfds_unknown_error", f"{type(e).__name__}: {e}", status_code=500)
+
+
+@app.get("/mfds/drugs")
+async def mfds_drugs(limit: int = Query(300, ge=1, le=500)):
+    """Fetch a batch of MFDS drug items (>=300 by default).
+
+    Useful for seeding the UI or local caching. Requires MFDS_SERVICE_KEY.
+    """
+
+    client = _get_mfds_client()
+    if client is None:
+        return _json_error(
+            "mfds_key_missing",
+            "Server is not configured. Set MFDS_SERVICE_KEY (and optionally MFDS_SERVICE_PATH, MFDS_API_BASE).",
+            status_code=503,
+        )
+
+    service = _get_mfds_service()
+    try:
+        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit))
+        normalized = [normalize_drug_item(x) for x in raw_items]
+        simplified = [
+            {
+                "itemName": x.get("itemName"),
+                "entpName": x.get("entpName"),
+                "itemSeq": x.get("itemSeq"),
+            }
+            for x in normalized
+        ]
+        simplified = [x for x in simplified if x.get("itemName")]
+        return {"status": "ok", "count": len(simplified), "items": simplified}
+    except MFDSOpenAPIError as e:
+        return _json_error("mfds_openapi_error", str(e), status_code=502)
+    except Exception as e:
+        return _json_error("mfds_unknown_error", f"{type(e).__name__}: {e}", status_code=500)
 
 
 @app.post("/tts")

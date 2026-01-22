@@ -21,6 +21,9 @@ DEFAULT_SERVICE_PATHS = {
     "permit": "/1471000/DrugPrdtPrmsnInfoService/getDrugPrdtPrmsnInq",
     # Pill identification (example)
     "pill": "/1471000/MdcinGrnIdntfcInfoService/getMdcinGrnIdntfcInfoList",
+
+    # Drug patent status (as shown in some data.go.kr approvals)
+    "patent": "/1471000/DrugDmstPtntStusService/getDrugDmstPtntStusService",
 }
 
 

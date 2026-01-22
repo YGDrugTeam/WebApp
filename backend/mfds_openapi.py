@@ -56,23 +56,40 @@ def _extract_items(payload: Any) -> Tuple[List[Dict[str, Any]], Optional[int]]:
     if not isinstance(payload, dict):
         return ([], None)
 
-    response = payload.get("response") if isinstance(payload.get("response"), dict) else payload
-    body = response.get("body") if isinstance(response.get("body"), dict) else response
+    response_obj: Dict[str, Any]
+    if isinstance(payload.get("response"), dict):
+        response_obj = payload["response"]
+    else:
+        response_obj = payload
 
-    total_count = body.get("totalCount") if isinstance(body.get("totalCount"), (int, str)) else None
-    try:
-        if isinstance(total_count, str) and total_count.isdigit():
-            total_count = int(total_count)
-    except Exception:
-        total_count = None
+    body_obj: Dict[str, Any]
+    if isinstance(response_obj.get("body"), dict):
+        body_obj = response_obj["body"]
+    else:
+        body_obj = response_obj
 
-    items = body.get("items")
+    total_count_raw = body_obj.get("totalCount")
+    total_count: Optional[int] = None
+    if isinstance(total_count_raw, int):
+        total_count = total_count_raw
+    elif isinstance(total_count_raw, str):
+        try:
+            total_count = int(total_count_raw)
+        except Exception:
+            total_count = None
+
+    items = body_obj.get("items")
 
     # items could be dict with key 'item'
     if isinstance(items, dict) and "item" in items:
         items = items.get("item")
 
-    return (_ensure_list(items), total_count)
+    out: List[Dict[str, Any]] = []
+    for item in _ensure_list(items):
+        if isinstance(item, dict):
+            out.append(item)
+
+    return (out, total_count)
 
 
 class MFDSOpenAPIClient:
@@ -193,10 +210,26 @@ def normalize_drug_item(raw: Dict[str, Any]) -> Dict[str, Any]:
     entp = _pick(raw, "entpName", "ENTP_NAME", "BSSH_NM")
     item_seq = _pick(raw, "itemSeq", "ITEM_SEQ", "PRDLST_REPORT_NO")
 
+    # Common e약은요(DrbEasyDrugInfoService) fields (names vary by endpoint/version)
+    efcy = _pick(raw, "efcyQesitm", "EFCY_QESITM")
+    use_method = _pick(raw, "useMethodQesitm", "USE_METHOD_QESITM")
+    warn = _pick(raw, "atpnWarnQesitm", "ATPN_WARN_QESITM")
+    caution = _pick(raw, "atpnQesitm", "ATPN_QESITM")
+    interaction = _pick(raw, "intrcQesitm", "INTRC_QESITM")
+    side_effect = _pick(raw, "seQesitm", "SE_QESITM")
+    storage = _pick(raw, "depositMethodQesitm", "DEPOSIT_METHOD_QESITM")
+
     return {
         "itemName": name,
         "entpName": entp,
         "itemSeq": item_seq,
+        "efcy": efcy,
+        "useMethod": use_method,
+        "warn": warn,
+        "caution": caution,
+        "interaction": interaction,
+        "sideEffect": side_effect,
+        "storage": storage,
         "raw": raw,
     }
 

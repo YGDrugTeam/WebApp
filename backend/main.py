@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -107,7 +107,43 @@ def _get_mfds_service() -> MFDSService:
         "MFDS_SERVICE_PATH",
         "/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList",
     ).strip()
+
+    # data.go.kr screens sometimes show only the service root like:
+    #   https://apis.data.go.kr/1471000/DrbEasyDrugInfoService
+    # In that case, append a sensible default method.
+    if path.endswith("/DrbEasyDrugInfoService"):
+        path = path + "/getDrbEasyDrugList"
+
     return MFDSService(service_path=path)
+
+
+def _get_mfds_search_param() -> str | None:
+    """Query parameter name to use for search.
+
+    Different data.go.kr APIs use different query fields (or none).
+    Set MFDS_SEARCH_PARAM to control which field receives `q`.
+
+    Examples:
+      MFDS_SEARCH_PARAM=itemName
+      MFDS_SEARCH_PARAM= (empty -> no server-side search param)
+    """
+
+    raw = os.getenv("MFDS_SEARCH_PARAM", "itemName")
+    raw = (raw or "").strip()
+    return raw or None
+
+
+def _collect_forward_params(request: Request, *, excluded: set[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k, v in request.query_params.multi_items():
+        if k in excluded:
+            continue
+        if k.lower() in {"servicekey", "pageno", "numofrows", "type"}:
+            continue
+        if v is None:
+            continue
+        out[k] = str(v)
+    return out
 
 
 async def _synthesize_edge_tts_mp3(text: str, voice: str, rate: str | None, volume: str | None) -> bytes:
@@ -236,7 +272,19 @@ async def health():
 
 
 @app.get("/mfds/search")
-async def mfds_search(q: str = Query(min_length=1), limit: int = Query(20, ge=1, le=200)):
+async def mfds_search(
+    request: Request,
+    q: str = Query(min_length=1),
+    limit: int = Query(20, ge=1, le=200),
+    field: str | None = Query(
+        None,
+        description="Optional: dataset-specific query field name to receive q. If omitted, MFDS_SEARCH_PARAM is used.",
+    ),
+    full: bool = Query(
+        False,
+        description="When true, return normalized records including detailed fields and raw payload.",
+    ),
+):
     client = _get_mfds_client()
     if client is None:
         return _json_error(
@@ -247,19 +295,35 @@ async def mfds_search(q: str = Query(min_length=1), limit: int = Query(20, ge=1,
 
     service = _get_mfds_service()
     try:
-        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params={"itemName": q})
+        extra_params = _collect_forward_params(request, excluded={"q", "limit", "field"})
+
+        search_param = (field or "").strip() or _get_mfds_search_param()
+        if search_param:
+            extra_params[search_param] = q
+
+        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params=extra_params)
         normalized = [normalize_drug_item(x) for x in raw_items]
-        # Drop the bulky raw payload for UI suggestion list by default.
-        simplified = [
-            {
-                "itemName": x.get("itemName"),
-                "entpName": x.get("entpName"),
-                "itemSeq": x.get("itemSeq"),
-            }
-            for x in normalized
-        ]
-        simplified = [x for x in simplified if x.get("itemName")]
-        return {"status": "ok", "q": q, "count": len(simplified), "items": simplified}
+        if full:
+            items_out = [x for x in normalized if x.get("itemName")]
+        else:
+            # Drop the bulky raw payload for UI suggestion list by default.
+            items_out = [
+                {
+                    "itemName": x.get("itemName"),
+                    "entpName": x.get("entpName"),
+                    "itemSeq": x.get("itemSeq"),
+                }
+                for x in normalized
+            ]
+            items_out = [x for x in items_out if x.get("itemName")]
+
+        # If the configured dataset does not support a server-side search param,
+        # fall back to client-side substring filtering by the normalized name.
+        if not search_param:
+            q_norm = q.strip().lower()
+            items_out = [x for x in items_out if q_norm in str(x.get("itemName") or "").lower()]
+
+        return {"status": "ok", "q": q, "count": len(items_out), "items": items_out}
     except MFDSOpenAPIError as e:
         msg = str(e)
         if "HTTP 403" in msg or "403" in msg and "Forbidden" in msg:
@@ -276,7 +340,14 @@ async def mfds_search(q: str = Query(min_length=1), limit: int = Query(20, ge=1,
 
 
 @app.get("/mfds/drugs")
-async def mfds_drugs(limit: int = Query(300, ge=1, le=500)):
+async def mfds_drugs(
+    request: Request,
+    limit: int = Query(300, ge=1, le=500),
+    full: bool = Query(
+        False,
+        description="When true, return normalized records including detailed fields and raw payload.",
+    ),
+):
     """Fetch a batch of MFDS drug items (>=300 by default).
 
     Useful for seeding the UI or local caching. Requires MFDS_SERVICE_KEY.
@@ -292,18 +363,23 @@ async def mfds_drugs(limit: int = Query(300, ge=1, le=500)):
 
     service = _get_mfds_service()
     try:
-        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit))
+        extra_params = _collect_forward_params(request, excluded={"limit"})
+        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params=extra_params)
         normalized = [normalize_drug_item(x) for x in raw_items]
-        simplified = [
-            {
-                "itemName": x.get("itemName"),
-                "entpName": x.get("entpName"),
-                "itemSeq": x.get("itemSeq"),
-            }
-            for x in normalized
-        ]
-        simplified = [x for x in simplified if x.get("itemName")]
-        return {"status": "ok", "count": len(simplified), "items": simplified}
+        if full:
+            items_out = [x for x in normalized if x.get("itemName")]
+        else:
+            items_out = [
+                {
+                    "itemName": x.get("itemName"),
+                    "entpName": x.get("entpName"),
+                    "itemSeq": x.get("itemSeq"),
+                }
+                for x in normalized
+            ]
+            items_out = [x for x in items_out if x.get("itemName")]
+
+        return {"status": "ok", "count": len(items_out), "items": items_out}
     except MFDSOpenAPIError as e:
         msg = str(e)
         if "HTTP 403" in msg or "403" in msg and "Forbidden" in msg:

@@ -41,6 +41,7 @@ export const checkDur = async (drugNames, options = {}) => {
     const res = await api.post('/dur/check', {
         drug_names: names,
         drugs,
+        ingredients_by_drug: options.ingredientsByDrug ?? undefined,
         scan_limit: options.scanLimit,
         per_page: options.perPage,
         max_pages: options.maxPages,

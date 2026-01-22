@@ -117,7 +117,12 @@ function App() {
                     itemSeq: pillMeta?.[name]?.itemSeq ?? null,
                     entpName: pillMeta?.[name]?.entpName ?? null,
                 }));
-                const res = await checkDur(drugs, { scanLimit: 3000, perPage: 100, maxPages: 80 });
+                const res = await checkDur(drugs, {
+                    scanLimit: 3000,
+                    perPage: 100,
+                    maxPages: 80,
+                    ingredientsByDrug: localInteractions?.ingredientsByDrug ?? {},
+                });
                 if (cancelled) return;
                 if (res?.ok === false) {
                     setDurInteractions({ warnings: [], cautions: [], info: [] });
@@ -136,7 +141,7 @@ function App() {
         return () => {
             cancelled = true;
         };
-    }, [pillList, pillMeta]);
+    }, [pillList, pillMeta, localInteractions]);
 
     const interactions = useMemo(() => {
         const warnings = [...(localInteractions?.warnings ?? []), ...(durInteractions?.warnings ?? [])];

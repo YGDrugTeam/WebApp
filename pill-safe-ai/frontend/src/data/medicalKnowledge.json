@@ -1,0 +1,195 @@
+{
+	"metadata": {
+		"version": "7.0.0",
+		"lastUpdated": "2026-01-22",
+		"description": "Comprehensive API-ready Medical Knowledge Base"
+	},
+	"generalTips": [
+		"같은 성분이라도 제품명이 다르면 중복 복용이 발생할 수 있어요. 성분(유효성분) 기준으로 확인하세요.",
+		"제품 설명서(첨부문서)의 1회/1일 최대 복용량과 복용 간격을 지키세요.",
+		"임신/수유 중이거나 지병/복용약이 있다면 전문가 상담이 필요해요.",
+		"졸림이 생길 수 있는 약(일부 항히스타민/감기약)은 운전·기계조작 전 주의하세요.",
+		"위장 자극이 있는 약(일부 진통제/소염제)은 공복 복용을 피하고 속쓰림/검은변/토혈이 있으면 진료가 필요해요.",
+		"여러 감기약을 함께 복용하면 같은 성분이 겹치기 쉬워요(진통제/항히스타민/기침약 등).",
+		"어린이/고령자는 용량 조절이 필요할 수 있어요. 연령별 제품을 선택하세요.",
+		"증상이 지속되거나 악화되면 즉시 복용을 중단하고 의료진과 상의하세요.",
+		"모든 약은 충분한 물과 함께 복용하는 것이 가장 좋습니다."
+	],
+	"brandDictionary": [
+		{ "brand": "타이레놀", "ingredients": ["acetaminophen"], "category": "해열진통제" },
+		{ "brand": "탁센", "ingredients": ["naproxen"], "category": "소염진통제" },
+		{ "brand": "애드빌", "ingredients": ["ibuprofen"], "category": "소염진통제" },
+		{ "brand": "임팩타민", "ingredients": ["vitamin_b_complex"], "category": "영양제" },
+		{ "brand": "리피토", "ingredients": ["atorvastatin"], "category": "고지혈증약" },
+		{ "brand": "센트룸", "ingredients": ["multivitamin", "minerals"], "category": "종합영양제" },
+		{ "brand": "오메가3", "ingredients": ["omega-3"], "category": "영양제" }
+	],
+	"interactions": [
+		{
+			"ingredientA": "acetaminophen",
+			"ingredientB": "alcohol",
+			"severity": "warning",
+			"title": "음주 및 간 부담",
+			"message": "아세트아미노펜 계열은 음주와 함께하면 간 손상 위험이 증가할 수 있어요."
+		},
+		{
+			"ingredientA": "aspirin",
+			"ingredientB": "ibuprofen",
+			"severity": "caution",
+			"title": "NSAID 병용 주의",
+			"message": "아스피린과 이부프로펜 병용 시 위장 출혈/신장 부담 위험이 증가할 수 있어요. 필요 시 전문가 상담 권장."
+		},
+		{
+			"ingredientA": "aspirin",
+			"ingredientB": "naproxen",
+			"severity": "warning",
+			"title": "NSAID 중복 복용",
+			"message": "아스피린과 나프록센을 함께 복용하면 위장 출혈/신장 부담 등 부작용 위험이 증가할 수 있어요. 한 계열만 선택하세요."
+		},
+		{
+			"ingredientA": "naproxen",
+			"ingredientB": "ibuprofen",
+			"severity": "warning",
+			"title": "NSAID 중복 복용",
+			"message": "나프록센(탁센)과 이부프로펜을 함께 복용하면 부작용 위험이 커질 수 있어요. 한 계열만 선택하세요."
+		},
+		{
+			"ingredientA": "antacid",
+			"ingredientB": "naproxen",
+			"severity": "info",
+			"title": "복용 간격",
+			"message": "제산제는 다른 약의 흡수에 영향을 줄 수 있어요. 가능하면 1~2시간 간격을 두세요."
+		},
+		{
+			"ingredientA": "omega-3",
+			"ingredientB": "warfarin",
+			"severity": "warning",
+			"title": "출혈 위험",
+			"message": "오메가3와 항응고제 병용 시 출혈 위험이 증가할 수 있습니다."
+		},
+		{
+			"ingredientA": "ibuprofen",
+			"ingredientB": "alcohol",
+			"severity": "caution",
+			"title": "음주 및 위장 자극",
+			"message": "이부프로펜과 음주를 함께하면 위장 자극/출혈 위험이 증가할 수 있어요."
+		},
+		{
+			"ingredientA": "naproxen",
+			"ingredientB": "alcohol",
+			"severity": "caution",
+			"title": "음주 및 위장 자극",
+			"message": "나프록센과 음주를 함께하면 위장 자극/출혈 위험이 증가할 수 있어요."
+		},
+		{
+			"ingredientA": "antacid",
+			"ingredientB": "fexofenadine",
+			"severity": "info",
+			"title": "흡수 저하 가능",
+			"message": "일부 제산제(알루미늄/마그네슘)는 펙소페나딘 흡수를 줄일 수 있어요. 가능하면 2시간 이상 간격을 두세요."
+		},
+		{
+			"ingredientA": "acetaminophen",
+			"ingredientB": "ibuprofen",
+			"severity": "info",
+			"title": "성분은 다르지만 용법 확인",
+			"message": "아세트아미노펜과 이부프로펜은 성분이 달라 중복 성분은 아니지만, 병용 시 용법·용량을 지키고 불편 증상이 있으면 중단하세요."
+		},
+		{
+			"ingredientA": "warfarin",
+			"ingredientB": "aspirin",
+			"severity": "danger",
+			"title": "출혈 위험 크게 증가",
+			"message": "와파린과 아스피린 병용은 출혈 위험을 크게 높일 수 있어요. 임의 병용은 피하고 의료진 지시에 따르세요."
+		},
+		{
+			"ingredientA": "warfarin",
+			"ingredientB": "ibuprofen",
+			"severity": "danger",
+			"title": "출혈 위험 크게 증가",
+			"message": "와파린과 이부프로펜 병용은 출혈 위험을 크게 높일 수 있어요. 진통제 선택 전 전문가 상담이 필요해요."
+		},
+		{
+			"ingredientA": "warfarin",
+			"ingredientB": "naproxen",
+			"severity": "danger",
+			"title": "출혈 위험 크게 증가",
+			"message": "와파린과 나프록센 병용은 출혈 위험을 크게 높일 수 있어요. 전문가 상담이 필요해요."
+		},
+		{
+			"ingredientA": "clopidogrel",
+			"ingredientB": "aspirin",
+			"severity": "warning",
+			"title": "출혈 위험 증가",
+			"message": "클로피도그렐과 아스피린 병용은 출혈 위험을 증가시킬 수 있어요. 의료진이 처방한 경우에만 복용하세요."
+		},
+		{
+			"ingredientA": "clopidogrel",
+			"ingredientB": "ibuprofen",
+			"severity": "warning",
+			"title": "출혈 위험 증가",
+			"message": "클로피도그렐과 NSAID(이부프로펜 등) 병용은 출혈 위험을 증가시킬 수 있어요. 진통제 선택 전 확인이 필요해요."
+		},
+		{
+			"ingredientA": "ssri",
+			"ingredientB": "ibuprofen",
+			"severity": "warning",
+			"title": "출혈 위험 증가 가능",
+			"message": "SSRI 계열 항우울제와 NSAID 병용 시 위장 출혈 위험이 증가할 수 있어요. 병용 전 전문가 상담을 권장해요."
+		},
+		{
+			"ingredientA": "ssri",
+			"ingredientB": "naproxen",
+			"severity": "warning",
+			"title": "출혈 위험 증가 가능",
+			"message": "SSRI 계열 항우울제와 나프록센 병용 시 출혈 위험이 증가할 수 있어요. 병용 전 확인이 필요해요."
+		},
+		{
+			"ingredientA": "maoi",
+			"ingredientB": "dextromethorphan",
+			"severity": "danger",
+			"title": "중대한 상호작용 가능",
+			"message": "MAOI 계열 약과 덱스트로메토르판 병용은 심각한 부작용 위험이 있어요. 함께 복용하지 말고 의료진과 상의하세요."
+		},
+		{
+			"ingredientA": "ssri",
+			"ingredientB": "dextromethorphan",
+			"severity": "warning",
+			"title": "상호작용 주의",
+			"message": "SSRI 계열 약과 덱스트로메토르판 병용은 부작용 위험이 증가할 수 있어요. 병용 전 전문가 상담을 권장해요."
+		},
+		{
+			"ingredientA": "diphenhydramine",
+			"ingredientB": "alcohol",
+			"severity": "warning",
+			"title": "심한 졸림/주의력 저하",
+			"message": "디펜히드라민(진정성 항히스타민)과 음주 병용은 심한 졸림/주의력 저하를 유발할 수 있어요."
+		},
+		{
+			"ingredientA": "chlorpheniramine",
+			"ingredientB": "alcohol",
+			"severity": "warning",
+			"title": "심한 졸림/주의력 저하",
+			"message": "클로르페니라민과 음주 병용은 심한 졸림/주의력 저하를 유발할 수 있어요."
+		},
+		{
+			"ingredientA": "pseudoephedrine",
+			"ingredientB": "caffeine",
+			"severity": "caution",
+			"title": "두근거림/불안 증가",
+			"message": "슈도에페드린과 카페인 병용은 두근거림/불안/불면을 악화시킬 수 있어요."
+		}
+	],
+	"ageSpecificGuides": {
+		"student": {
+			"target": "수험생",
+			"recommendations": ["비타민 B군", "테아닌"],
+			"caution": "고카페인 음료와 코감기약 병용 주의"
+		},
+		"senior": {
+			"target": "어르신",
+			"recommendations": ["칼슘", "비타민 D", "유산균"],
+			"caution": "만성질환 약물과 자몽/한약재 병용 주의"
+		}
+	}
+}

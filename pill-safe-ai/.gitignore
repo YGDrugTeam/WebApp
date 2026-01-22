@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Local secrets / env
+frontend/.env
+
+# Generated audio artifacts
+backend/tts_test_*.mp3

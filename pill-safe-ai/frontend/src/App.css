@@ -1,38 +1,120 @@
-.App {
-  text-align: center;
+:root {
+  --primary: #4A90E2;
+  --bg: #F5F7FA;
+  --card: #FFFFFF;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+body { background-color: var(--bg); font-family: 'Pretendard', sans-serif; }
+.app-shell { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+.app-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+@media (min-width: 900px) {
+  .app-layout { grid-template-columns: 1fr 1fr; align-items: start; }
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.card {
+  margin-top: 12px;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #E2E8F0;
+}
+
+.card h3 { margin-top: 0; }
+
+.btn-row {
   display: flex;
-  flex-direction: column;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid #CBD5E0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  padding: 8px 12px;
+  background: white;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: #EBF8FF;
+  font-weight: 800;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+@media (min-width: 560px) {
+  .recommendation-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+.recommendation-item {
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 10px;
+  background: #FFFFFF;
+}
+
+.recommendation-item small { color: #4A5568; display: block; margin-top: 6px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  padding: 20px;
+  z-index: 9999;
 }
 
-.App-link {
-  color: #61dafb;
+.modal {
+  width: 100%;
+  max-width: 520px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0;
+  padding: 16px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.modal h3 { margin-top: 0; }
+
+.modal .meta { color: #4A5568; font-size: 0.95rem; }
+
+.app-header h1 { color: var(--primary); font-size: 2.5rem; margin-bottom: 5px; }
+.logo-ai { color: #FF6B6B; }
+
+.pill-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.pill-card { 
+  background: var(--card); padding: 10px 15px; border-radius: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 10px;
+  border: 1px solid #E1E8ED; animation: popIn 0.3s ease;
+}
+
+.main-analyze-btn {
+  width: 100%; padding: 18px; border-radius: 12px; border: none;
+  background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+  color: white; font-size: 1.1rem; font-weight: bold; cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.main-analyze-btn:hover { transform: translateY(-2px); }
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }

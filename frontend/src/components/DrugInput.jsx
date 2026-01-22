@@ -29,7 +29,7 @@ function DrugInput({ onAdd }) {
         setIsSearching(true);
         setSearchError('');
         try {
-            const data = await searchMfdsDrugs(q, 20);
+            const data = await searchMfdsDrugs(q, 10, { scanPages: 200 });
             if (data?.ok === false) {
                 setMfdsResults([]);
                 setSearchError(data?.detail || data?.error || 'MFDS 검색 실패');
@@ -44,7 +44,20 @@ function DrugInput({ onAdd }) {
             if (items.length === 0) setSearchError('검색 결과가 없습니다.');
         } catch (e) {
             setMfdsResults([]);
-            setSearchError('MFDS 검색 중 오류가 발생했습니다. 백엔드가 실행 중인지 확인해 주세요.');
+            const status = e?.response?.status;
+            const data = e?.response?.data;
+            const detail =
+                (typeof data?.detail === 'string' && data.detail) ||
+                (typeof data?.error === 'string' && data.error) ||
+                (typeof data?.message === 'string' && data.message) ||
+                (typeof e?.message === 'string' && e.message) ||
+                '';
+
+            if (status) {
+                setSearchError(`MFDS 검색 실패 (HTTP ${status})${detail ? `: ${detail}` : ''}`);
+            } else {
+                setSearchError(`MFDS 검색 실패${detail ? `: ${detail}` : ''}`);
+            }
         } finally {
             setIsSearching(false);
         }

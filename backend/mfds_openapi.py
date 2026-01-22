@@ -202,6 +202,28 @@ class MFDSOpenAPIClient:
     ) -> List[Dict[str, Any]]:
         return list(self.iter_items(service, limit=limit, rows=rows, extra_params=extra_params))
 
+    def fetch_page(
+        self,
+        service: MFDSService,
+        *,
+        page: int = 1,
+        rows: int = 100,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+        """Fetch a single page and return (items, totalCount)."""
+
+        extra_params = dict(extra_params or {})
+        params: Dict[str, Any] = {
+            "serviceKey": self._service_key,
+            service.page_param: page,
+            service.rows_param: rows,
+            service.type_param: service.type_value,
+            **extra_params,
+        }
+
+        payload = self._get(service.service_path, params)
+        return _extract_items(payload)
+
 
 def normalize_drug_item(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize common drug fields across MFDS endpoints (best-effort)."""

@@ -357,6 +357,12 @@ async def mfds_search(
         False,
         description="When true, return normalized records including detailed fields and raw payload.",
     ),
+    scan_pages: int = Query(
+        50,
+        ge=1,
+        le=200,
+        description="When server-side filtering is unreliable, scan this many pages and filter locally.",
+    ),
 ):
     client = _get_mfds_client()
     if client is None:
@@ -368,14 +374,47 @@ async def mfds_search(
 
     service = _get_mfds_service()
     try:
-        extra_params = _collect_forward_params(request, excluded={"q", "limit", "field"})
+        base_params = _collect_forward_params(request, excluded={"q", "limit", "field", "scan_pages"})
 
         search_param = (field or "").strip() or _get_mfds_search_param()
+        fast_params = dict(base_params)
         if search_param:
-            extra_params[search_param] = q
+            fast_params[search_param] = q
 
-        raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params=extra_params)
-        normalized = [normalize_drug_item(x) for x in raw_items]
+        # For client-side scans, omit the server-side search param to avoid exact-match filters.
+        scan_params = dict(base_params)
+
+        q_norm = q.strip().lower()
+        search_param_norm = (search_param or "").strip().lower()
+        name_search_fields = {"itemname", "item_name", "prdlstnm", "prdlst_nm", "entp_item_name"}
+        needs_local_name_filter = (not search_param) or (search_param_norm in name_search_fields)
+
+        # Many MFDS endpoints either don't support server-side search at all, or ignore the search param.
+        # For name searches, scan a few pages and filter locally to produce relevant results.
+        if needs_local_name_filter:
+            matches: list[dict] = []
+            for raw in client.iter_items(
+                service,
+                limit=scan_pages * 100,
+                rows=100,
+                extra_params=scan_params,
+                max_pages=scan_pages,
+            ):
+                norm = normalize_drug_item(raw)
+                name = str(norm.get("itemName") or "").strip()
+                if not name:
+                    continue
+                if q_norm not in name.lower():
+                    continue
+                matches.append(norm)
+                if len(matches) >= limit:
+                    break
+
+            normalized = matches
+        else:
+            raw_items = client.fetch_items(service, limit=limit, rows=min(100, limit), extra_params=fast_params)
+            normalized = [normalize_drug_item(x) for x in raw_items]
+
         if full:
             items_out = [x for x in normalized if x.get("itemName")]
         else:
@@ -389,12 +428,6 @@ async def mfds_search(
                 for x in normalized
             ]
             items_out = [x for x in items_out if x.get("itemName")]
-
-        # If the configured dataset does not support a server-side search param,
-        # fall back to client-side substring filtering by the normalized name.
-        if not search_param:
-            q_norm = q.strip().lower()
-            items_out = [x for x in items_out if q_norm in str(x.get("itemName") or "").lower()]
 
         return {"status": "ok", "q": q, "count": len(items_out), "items": items_out}
     except MFDSOpenAPIError as e:

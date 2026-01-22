@@ -14,10 +14,15 @@ export const checkSafety = async (pillList) => {
     return res.data;
 };
 
-export const searchMfdsDrugs = async (query, limit = 20) => {
+export const searchMfdsDrugs = async (query, limit = 20, options = {}) => {
     const q = String(query ?? '').trim();
     if (!q) return { status: 'ok', q: '', count: 0, items: [] };
-    const res = await api.get('/mfds/search', { params: { q, limit } });
+    const scanPages = options?.scanPages;
+    const params = { q, limit };
+    if (typeof scanPages === 'number' && Number.isFinite(scanPages) && scanPages > 0) {
+        params.scan_pages = scanPages;
+    }
+    const res = await api.get('/mfds/search', { params });
     return res.data;
 };
 

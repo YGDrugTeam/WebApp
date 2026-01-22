@@ -7,3 +7,4 @@ easyocr==1.7.0
 edge-tts==6.1.19
 azure-cognitiveservices-speech==1.47.0
 requests==2.32.3
+python-dotenv==1.0.1

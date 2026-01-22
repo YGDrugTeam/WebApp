@@ -11,6 +11,26 @@ import os
 import tempfile
 
 try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover
+    load_dotenv = None
+
+
+def _load_env_files() -> None:
+    if load_dotenv is None:
+        return
+    # Load a backend-local .env first, then repo-root .env if present.
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        load_dotenv(os.path.join(here, ".env"), override=False)
+        load_dotenv(os.path.join(os.path.dirname(here), ".env"), override=False)
+    except Exception:
+        pass
+
+
+_load_env_files()
+
+try:
     import edge_tts
 except Exception:  # pragma: no cover
     edge_tts = None

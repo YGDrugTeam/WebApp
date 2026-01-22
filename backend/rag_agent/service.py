@@ -50,6 +50,20 @@ class RagService:
         self.ensure_loaded()
         raw_contexts = self._index.query(query, k=k)
 
+        q_norm = re.sub(r"\s+", " ", (query or "").strip().lower())
+
+        def _intent(q: str) -> str:
+            # Very small heuristic router to reduce unsafe synthesis.
+            if any(x in q for x in ["상호작", "병용", "같이", "동시", "중복", "함께"]):
+                return "interaction"
+            if any(x in q for x in ["주의", "부작", "부작용", "금기", "복용", "먹어", "먹으면", "용법", "용량"]):
+                return "safety"
+            if any(x in q for x in ["성분", "ingredient", "성분명", "유효성분"]):
+                return "ingredient"
+            return "general"
+
+        intent = _intent(q_norm)
+
         def _snippet(text: str, *, limit: int = 280) -> str:
             s = re.sub(r"\s+", " ", (text or "").strip())
             if len(s) <= limit:
@@ -67,22 +81,37 @@ class RagService:
 
         # Filter to evidence-worthy contexts (reduce hallucination risk)
         min_score = float(os.getenv("RAG_MIN_SCORE", "0.12"))
+        strict = os.getenv("RAG_STRICT", "1").strip().lower() not in {"0", "false", "no", "off"}
+        if strict:
+            # Slightly higher threshold in strict mode.
+            min_score = max(min_score, 0.15)
+
         contexts = [c for c in raw_contexts if float(c.get("score") or 0) >= min_score]
 
         evidence = []
+        kinds_seen: set[str] = set()
         for c in contexts[: max(1, int(k))]:
             title = str(c.get("title") or "").strip()
             text = str(c.get("text") or "").strip()
             meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
             src = str(meta.get("source") or "RAG")
+            kind = str(meta.get("kind") or "").strip()
+            if kind:
+                kinds_seen.add(kind)
             evidence.append(
                 {
                     "source": "RAG",
                     "id": str(c.get("id") or ""),
-                    "field": src,
+                    "field": f"{src}{(':'+kind) if kind else ''}",
                     "snippet": _snippet(f"[{title}] {text}" if title else text),
                 }
             )
+
+        # Strict mode: prevent generic 'tips' from being the only evidence for safety/interaction questions.
+        if strict and evidence:
+            only_tips = kinds_seen == {"tip"}
+            if only_tips and intent in {"interaction", "safety", "ingredient"}:
+                evidence = []
 
         if not evidence:
             return {
@@ -102,12 +131,14 @@ class RagService:
             if sn:
                 key_points.append(_snippet(sn, limit=120))
 
-        # Map to a conservative safety level when the KB explicitly contains interaction severity.
+        # Compute safety level ONLY when explicitly stated in evidence.
         safety_level = "unknown"
         joined = "\n".join([str(ev.get("snippet") or "") for ev in evidence]).lower()
-        if any(x in joined for x in ["병용 금기", "금기", "contraind"]):
+        if any(x in joined for x in ["병용 금기", "contraind", "금기:"]):
             safety_level = "avoid"
-        elif any(x in joined for x in ["주의", "caution", "중요도: high", "severity: high", "중요도: medium"]):
+        elif any(x in joined for x in ["중요도: high", "severity: high"]):
+            safety_level = "avoid"
+        elif any(x in joined for x in ["중요도: medium", "severity: medium", "주의:", "주의사항"]):
             safety_level = "caution"
 
         answer_lines = [

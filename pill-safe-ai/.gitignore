@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local env files (DO NOT COMMIT)
+.env
+.env.*
+backend/.env
+backend/.env.*
+
+# Backend temp
+backend/.tmp/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

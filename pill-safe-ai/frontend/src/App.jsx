@@ -1,25 +1,55 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Header from './components/Header';
 import DrugInput from './components/DrugInput';
 import DrugListDisplay from './components/DrugListDisplay';
 import CameraCapture from './components/CameraCapture';  // ← 확인!
+import AnalysisReport from './components/AnalysisReport';
+import VoiceGuidePlayer from './components/VoiceGuidePlayer';
+import PatientInfo from './components/PatientInfo';
+import { matchDrugName } from './utils/drugMatcher';
+import { computeInteractions } from './utils/interactionChecker';
 import './index.css';
 
 function App() {
     const [drugs, setDrugs] = useState([]);
+    const [ageYearsInput, setAgeYearsInput] = useState('');
 
     const addDrug = (drugName) => {
-        if (drugs.includes(drugName)) {
+        const raw = (drugName ?? '').toString().trim();
+        if (!raw) return;
+
+        const match = matchDrugName(raw);
+        const uniqueKey = match.best?.drug?.id ?? match.normalizedInput;
+
+        if (drugs.some((d) => d.uniqueKey === uniqueKey)) {
             alert('이미 등록된 약입니다!');
             return;
         }
-        if (!drugName.trim()) return;
-        setDrugs([...drugs, drugName]);
+
+        const item = {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            rawName: raw,
+            uniqueKey,
+            match
+        };
+
+        setDrugs((prev) => [...prev, item]);
     };
 
-    const deleteDrug = (index) => {
-        setDrugs(drugs.filter((_, i) => i !== index));
+    const deleteDrug = (id) => {
+        setDrugs((prev) => prev.filter((d) => d.id !== id));
     };
+
+    const ageYears = useMemo(() => {
+        const raw = String(ageYearsInput ?? '').trim();
+        if (!raw) return null;
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return null;
+        const clamped = Math.max(0, Math.min(120, Math.floor(n)));
+        return clamped;
+    }, [ageYearsInput]);
+
+    const interactionResult = useMemo(() => computeInteractions(drugs, { ageYears }), [drugs, ageYears]);
 
     return (
         <div className="app-container">
@@ -41,22 +71,11 @@ function App() {
 
                 <div className="right-column">
                     <h2 className="sub-title">2. AI 분석 리포트</h2>
-                    {drugs.length === 0 ? (
-                        <p style={{ fontSize: '20px', color: '#718096' }}>
-                            약을 등록하면 분석이 시작됩니다.
-                        </p>
-                    ) : (
-                        <div>
-                            <p style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                                등록된 약: {drugs.length}개
-                            </p>
-                            <ul style={{ fontSize: '20px', lineHeight: '1.8' }}>
-                                {drugs.map((drug, i) => (
-                                    <li key={i}>{drug}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
+                    <PatientInfo ageYearsInput={ageYearsInput} onAgeYearsInputChange={setAgeYearsInput} />
+                    <div style={{ height: 12 }} />
+                    <AnalysisReport drugItems={drugs} interactionResult={interactionResult} />
+                    <div style={{ height: 12 }} />
+                    <VoiceGuidePlayer drugItems={drugs} interactionResult={interactionResult} />
                 </div>
             </div>
         </div>

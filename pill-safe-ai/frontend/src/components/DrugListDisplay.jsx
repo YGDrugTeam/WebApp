@@ -1,12 +1,16 @@
 import React from 'react';
+import { formatDrugDisplay } from '../utils/drugMatcher';
 
 function DrugListDisplay({ drugs, onDelete }) {
     return (
         <div>
-            {drugs.map((drug, index) => (
-                <div key={index} className="drug-item"> {/* 여기! */}
-                    <span>{drug}</span>
-                    <button onClick={() => onDelete(index)}>삭제</button>
+            {drugs.map((drug) => (
+                <div key={drug.id} className="drug-item">
+                    <div className="drug-item__text">
+                        <span className="drug-item__name">{formatDrugDisplay(drug)}</span>
+                        <span className="drug-item__sub">입력/인식: {drug.rawName}</span>
+                    </div>
+                    <button onClick={() => onDelete(drug.id)}>삭제</button>
                 </div>
             ))}
         </div>

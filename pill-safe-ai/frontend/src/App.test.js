@@ -1,8 +1,19 @@
 import { render, screen } from '@testing-library/react';
+
+jest.mock('axios', () => ({
+  __esModule: true,
+  ...(() => {
+    const mock = {
+      get: jest.fn().mockResolvedValue({ data: { azure: { configured: false } } }),
+      post: jest.fn()
+    };
+    return { default: mock, ...mock };
+  })()
+}));
+
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders app title', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByText(/pill-safe ai/i)).toBeInTheDocument();
 });

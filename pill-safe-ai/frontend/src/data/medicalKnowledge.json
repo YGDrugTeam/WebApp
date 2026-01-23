@@ -1,0 +1,28 @@
+{
+	"version": 1,
+	"source": "sample",
+	"disclaimer": "이 앱의 정보는 참고용이며 진단/처방을 대체하지 않습니다. 복용 전 반드시 의사/약사와 상담하세요. (일부 경고는 공공데이터포털에 공개된 DUR 관련 데이터 기반이며, 연령/임신 등 개인 조건에 따라 달라질 수 있습니다.)",
+	"interactionPairs": [
+		{
+			"aIngredient": "ibuprofen",
+			"bIngredient": "aspirin",
+			"severity": "high",
+			"title": "NSAID 중복 가능성",
+			"message": "이부프로펜과 아스피린은 함께 복용 시 위장관 출혈/부작용 위험이 증가할 수 있습니다."
+		}
+	],
+	"ingredientDuplicateRules": [
+		{
+			"ingredient": "acetaminophen",
+			"severity": "high",
+			"title": "아세트아미노펜 중복",
+			"message": "아세트아미노펜 성분이 2개 이상 겹치면 과량 복용 위험이 있습니다."
+		},
+		{
+			"ingredient": "ibuprofen",
+			"severity": "medium",
+			"title": "NSAID 성분 중복",
+			"message": "동일 NSAID 성분이 중복되면 위장 장애 등 부작용 위험이 증가할 수 있습니다."
+		}
+	]
+}

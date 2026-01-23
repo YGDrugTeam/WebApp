@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "source": "DUR age contraindications CSV",
+  "sourceEncodingDetected": "cp949",
+  "generatedAt": "2026-01-22T05:36:00.784185+00:00",
+  "rowCount": 5,
+  "rules": [
+    {
+      "typeName": "특정연령대금기",
+      "mixType": "복합",
+      "ingredientCode": "D000893",
+      "ingredientNameEn": "Chlorpheniramine",
+      "ingredientNameKo": "클로르페니라민",
+      "ingredientKey": "chlorpheniramine",
+      "className": "[01320]이비과용제",
+      "formName": "일반액상분무제",
+      "notificationDate": "20250714",
+      "prohibitContent": "-",
+      "remark": null,
+      "ageRanges": []
+    },
+    {
+      "typeName": "특정연령대금기",
+      "mixType": "단일",
+      "ingredientCode": "D001733",
+      "ingredientNameEn": "Povidone-iodine",
+      "ingredientNameKo": "포비돈요오드",
+      "ingredientKey": "povidoneiodine",
+      "className": "[02310]치과구강용약",
+      "formName": "일반액상분무제/가글제/경구용액제/가글제, 용액용정제",
+      "notificationDate": "20251223",
+      "prohibitContent": null,
+      "remark": "구강용 액제, 구강용 스프레이제",
+      "ageRanges": []
+    },
+    {
+      "typeName": "특정연령대금기",
+      "mixType": "단일",
+      "ingredientCode": "D001733",
+      "ingredientNameEn": "Povidone-iodine",
+      "ingredientNameKo": "포비돈요오드",
+      "ingredientKey": "povidoneiodine",
+      "className": "[02610]외피용살균소독제",
+      "formName": "일반분말분무제",
+      "notificationDate": "20251223",
+      "prohibitContent": "-",
+      "remark": "에어로솔제",
+      "ageRanges": []
+    },
+    {
+      "typeName": "특정연령대금기",
+      "mixType": "단일",
+      "ingredientCode": "D001733",
+      "ingredientNameEn": "Povidone-iodine",
+      "ingredientNameKo": "포비돈요오드",
+      "ingredientKey": "povidoneiodine",
+      "className": "[02550]비뇨생식기관용제(성병예방제포함)/[02610]외피용살균소독제/[02590]기타의 비뇨생식기관 및 항문용약",
+      "formName": "질좌제, 일반/피부액제/피부연고제/질세정액",
+      "notificationDate": "20251223",
+      "prohibitContent": "-",
+      "remark": "질용좌제, 외용액제, 연고제",
+      "ageRanges": []
+    },
+    {
+      "typeName": "특정연령대금기",
+      "mixType": "복합",
+      "ingredientCode": "D000393",
+      "ingredientNameEn": "Naloxone",
+      "ingredientNameKo": "날록손",
+      "ingredientKey": "naloxone",
+      "className": "[08210]합성마약",
+      "formName": "서방성필름코팅정",
+      "notificationDate": "20251223",
+      "prohibitContent": "- 안전성 및 유효성 미확립",
+      "remark": null,
+      "ageRanges": [
+        {
+          "minAge": null,
+          "minInclusive": true,
+          "maxAge": 18,
+          "maxInclusive": false
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "This file is generated from a DUR CSV. Do not hand-edit; re-run the generator.",
+    "ageRanges parsing is best-effort; unmatched rows may have empty ageRanges."
+  ]
+}

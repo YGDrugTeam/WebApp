@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { pickBestOcrCandidate } from '../utils/ocrProcessor';
 
 function CameraCapture({ onPillDetected }) {
-    console.log("🎥 CameraCapture 렌더링됨!");  // ← 추가!
-    
     const [isLoading, setIsLoading] = useState(false);
 
     const handleCapture = async (e) => {
@@ -17,9 +16,9 @@ function CameraCapture({ onPillDetected }) {
         
         try {
             const response = await axios.post('http://localhost:8000/analyze', formData);
-            const pillName = response.data.pill_name;
-            
-            console.log("인식된 약:", pillName);
+            const ocrText = response.data.pill_name;
+            const pillName = pickBestOcrCandidate(ocrText);
+
             if (pillName && pillName.trim()) {
                 onPillDetected(pillName.trim());
                 alert(`약 인식 완료: ${pillName}`);
@@ -35,7 +34,7 @@ function CameraCapture({ onPillDetected }) {
     };
     
     return (
-        <div style={{ marginBottom: '20px', border: '2px solid red' }}>  {/* ← 테스트용 빨간 테두리 */}
+        <div style={{ marginBottom: '20px' }}>
             <label style={{
                 display: 'block',
                 padding: '15px',
@@ -47,7 +46,7 @@ function CameraCapture({ onPillDetected }) {
                 fontSize: '18px',
                 fontWeight: 'bold'
             }}>
-                📷 사진으로 약 등록하기
+                사진으로 약 등록하기
                 <input 
                     type="file" 
                     accept="image/*" 
@@ -64,7 +63,7 @@ function CameraCapture({ onPillDetected }) {
                     color: '#4299E1',
                     marginTop: '10px' 
                 }}>
-                    🔄 분석 중...
+                    분석 중...
                 </p>
             )}
         </div>

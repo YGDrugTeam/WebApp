@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "source": "openfda",
+  "generatedAt": 1769054858,
+  "drugs": [
+    {
+      "id": "silicea",
+      "brandNameKo": "SILICEA",
+      "genericName": "SILICEA",
+      "aliases": [],
+      "ingredients": [
+        "SILICON DIOXIDE"
+      ],
+      "usage": "의약품 (openFDA)",
+      "notes": [
+        "이 데이터는 openFDA에서 자동 생성된 참고용 요약입니다.",
+        "복용/상호작용은 반드시 전문가와 상담하세요."
+      ]
+    },
+    {
+      "id": "betadine",
+      "brandNameKo": "Betadine",
+      "genericName": "POVIDONE-IODINE",
+      "aliases": [
+        "POVIDONE-IODINE"
+      ],
+      "ingredients": [
+        "POVIDONE-IODINE"
+      ],
+      "usage": "의약품 (openFDA)",
+      "notes": [
+        "이 데이터는 openFDA에서 자동 생성된 참고용 요약입니다.",
+        "복용/상호작용은 반드시 전문가와 상담하세요."
+      ]
+    },
+    {
+      "id": "naproxen",
+      "brandNameKo": "Naproxen",
+      "genericName": "NAPROXEN",
+      "aliases": [],
+      "ingredients": [
+        "NAPROXEN"
+      ],
+      "usage": "의약품 (openFDA)",
+      "notes": [
+        "이 데이터는 openFDA에서 자동 생성된 참고용 요약입니다.",
+        "복용/상호작용은 반드시 전문가와 상담하세요."
+      ]
+    },
+    {
+      "id": "moisturizing-antibacterial",
+      "brandNameKo": "Moisturizing Antibacterial",
+      "genericName": "BENZALKONIUM CHLORIDE",
+      "aliases": [
+        "BENZALKONIUM CHLORIDE"
+      ],
+      "ingredients": [
+        "BENZALKONIUM CHLORIDE"
+      ],
+      "usage": "의약품 (openFDA)",
+      "notes": [
+        "이 데이터는 openFDA에서 자동 생성된 참고용 요약입니다.",
+        "복용/상호작용은 반드시 전문가와 상담하세요."
+      ]
+    },
+    {
+      "id": "quick-action",
+      "brandNameKo": "Quick Action",
+      "genericName": "SALICYLIC ACID",
+      "aliases": [
+        "SALICYLIC ACID"
+      ],
+      "ingredients": [
+        "SALICYLIC ACID"
+      ],
+      "usage": "의약품 (openFDA)",
+      "notes": [
+        "이 데이터는 openFDA에서 자동 생성된 참고용 요약입니다.",
+        "복용/상호작용은 반드시 전문가와 상담하세요."
+      ]
+    }
+  ]
+}

@@ -1,53 +1,143 @@
 {
-	"version": 1,
-	"source": "sample",
 	"drugs": [
 		{
-			"id": "tylenol",
-			"brandNameKo": "타이레놀",
-			"genericName": "acetaminophen",
-			"aliases": ["타이레놀정", "타이레놀 500", "TYLENOL"],
-			"ingredients": ["acetaminophen"],
-			"usage": "해열·진통",
-			"notes": [
-				"동일 성분(아세트아미노펜) 중복 복용을 피하세요.",
-				"음주/간질환이 있는 경우 전문가와 상담하세요."
+			"name": "타이레놀 500mg",
+			"aliases": ["타이레놀", "TYLENOL", "acetaminophen", "아세트아미노펜"],
+			"activeIngredients": ["acetaminophen"],
+			"cautions": ["다른 해열진통제(아세트아미노펜 성분)와 중복 복용에 주의하세요.", "간 질환이 있거나 음주가 잦으면 전문가와 상담하세요."]
+		},
+		{
+			"name": "아스피린",
+			"aliases": ["aspirin", "아세틸살리실산"],
+			"activeIngredients": ["aspirin"],
+			"cautions": ["위장 장애/출혈 위험이 있을 수 있어요."]
+		},
+		{
+			"name": "이부프로펜",
+			"aliases": ["ibuprofen", "부루펜", "애드빌"],
+			"activeIngredients": ["ibuprofen"],
+			"cautions": ["위장 장애가 있을 수 있으니 식후 복용을 권장해요."]
+		},
+		{
+			"name": "탁센",
+			"aliases": ["탁센", "naproxen", "나프록센"],
+			"activeIngredients": ["naproxen"],
+			"cautions": ["NSAID 계열 진통제 중복 복용은 피하세요."]
+		},
+		{
+			"name": "겔포스 M",
+			"aliases": ["겔포스", "gelpos", "제산제"],
+			"activeIngredients": ["antacid"],
+			"cautions": ["다른 약과 함께 복용 시 1~2시간 간격을 두는 것이 좋아요."]
+		},
+		{
+			"name": "베아제 정",
+			"aliases": ["베아제", "소화제"],
+			"activeIngredients": ["digestive-enzyme"],
+			"cautions": []
+		},
+		{
+			"name": "세티리진",
+			"aliases": ["세티리진", "cetirizine", "지르텍", "ZYRTEC"],
+			"activeIngredients": ["cetirizine"],
+			"cautions": ["졸림이 있을 수 있어요. 운전/기계조작 전 주의하세요."]
+		},
+		{
+			"name": "로라타딘",
+			"aliases": ["로라타딘", "loratadine", "클라리틴", "CLARITIN"],
+			"activeIngredients": ["loratadine"],
+			"cautions": ["일부 사람에게 졸림이 있을 수 있어요."]
+		},
+		{
+			"name": "펙소페나딘",
+			"aliases": ["펙소페나딘", "fexofenadine", "알레그라", "ALLEGRA"],
+			"activeIngredients": ["fexofenadine"],
+			"cautions": ["제산제(알루미늄/마그네슘 성분)와 함께 복용하면 흡수가 감소할 수 있어요."]
+		},
+		{
+			"name": "디펜히드라민",
+			"aliases": ["디펜히드라민", "diphenhydramine", "베나드릴", "BENADRYL"],
+			"activeIngredients": ["diphenhydramine"],
+			"cautions": ["졸림/어지러움이 흔해요. 음주 및 다른 진정 성분과 병용을 피하세요."]
+		},
+		{
+			"name": "클로르페니라민",
+			"aliases": ["클로르페니라민", "chlorpheniramine"],
+			"activeIngredients": ["chlorpheniramine"],
+			"cautions": ["졸림이 있을 수 있어요. 음주 및 다른 진정 성분과 병용을 피하세요."]
+		},
+		{
+			"name": "덱스트로메토르판",
+			"aliases": ["덱스트로메토르판", "dextromethorphan", "DXM"],
+			"activeIngredients": ["dextromethorphan"],
+			"cautions": ["항우울제(특히 MAOI/SSRI)와 병용 시 위험할 수 있어요. 전문가와 상의하세요."]
+		},
+		{
+			"name": "슈도에페드린",
+			"aliases": ["슈도에페드린", "pseudoephedrine"],
+			"activeIngredients": ["pseudoephedrine"],
+			"cautions": ["심장이 두근거리거나 혈압이 올라갈 수 있어요. 고혈압/심장질환이 있으면 전문가 상담이 필요해요."]
+		},
+		{
+			"name": "음주(알코올)",
+			"aliases": ["술", "음주", "alcohol", "알코올"],
+			"activeIngredients": ["alcohol"],
+			"cautions": ["약물 복용 중 음주는 부작용을 증가시키거나 약효에 영향을 줄 수 있어요."]
+		},
+		{
+			"name": "카페인",
+			"aliases": ["카페인", "caffeine", "커피"],
+			"activeIngredients": ["caffeine"],
+			"cautions": ["불면/두근거림이 있을 수 있어요. 감기약 성분과 함께하면 더 심해질 수 있어요."]
+		},
+		{
+			"name": "항응고제(와파린)",
+			"aliases": ["와파린", "warfarin", "쿠마딘", "COUMADIN"],
+			"activeIngredients": ["warfarin"],
+			"cautions": ["다른 약과 상호작용이 많아요. 임의로 병용하지 말고 전문가와 상의하세요."]
+		},
+		{
+			"name": "항혈소판제(클로피도그렐)",
+			"aliases": ["클로피도그렐", "clopidogrel", "플라빅스", "PLAVIX"],
+			"activeIngredients": ["clopidogrel"],
+			"cautions": ["출혈 위험이 증가할 수 있어요. 진통제/감기약 병용 전 확인이 필요해요."]
+		},
+		{
+			"name": "SSRI(항우울제)",
+			"aliases": ["SSRI", "항우울제", "serotonin reuptake inhibitor", "세로토닌"],
+			"activeIngredients": ["ssri"],
+			"cautions": ["감기약/진통제와 상호작용이 있을 수 있어요. 병용 전 전문가 상담을 권장해요."]
+		},
+		{
+			"name": "MAOI(항우울제)",
+			"aliases": ["MAOI", "모노아민산화효소억제제", "monoamine oxidase inhibitor"],
+			"activeIngredients": ["maoi"],
+			"cautions": ["다른 약과 심각한 상호작용이 있을 수 있어요. 병용 전 반드시 전문가와 상의하세요."]
+		},
+		{
+			"name": "오메가3",
+			"aliases": ["오메가3", "omega-3", "omega3", "EPA", "DHA"],
+			"activeIngredients": ["omega-3"],
+			"cautions": ["항응고제/항혈소판제 복용 중이면 출혈 위험이 증가할 수 있어요. 전문가 상담이 필요해요."]
+		},
+		{
+			"name": "임팩타민",
+			"aliases": ["임팩타민", "비타민B", "비타민 B", "vitamin b", "vitamin_b_complex"],
+			"activeIngredients": ["vitamin_b_complex"],
+			"cautions": ["영양제도 다른 제품과 성분이 중복될 수 있어요."
 			]
 		},
 		{
-			"id": "ibuprofen",
-			"brandNameKo": "부루펜",
-			"genericName": "ibuprofen",
-			"aliases": ["이부프로펜", "BRUFEN", "부루펜시럽"],
-			"ingredients": ["ibuprofen"],
-			"usage": "해열·진통·소염(NSAID)",
-			"notes": [
-				"위장장애가 있는 경우 주의하세요.",
-				"다른 NSAID(예: 아스피린)와 중복 복용을 피하세요."
-			]
+			"name": "리피토",
+			"aliases": ["리피토", "lipitor", "atorvastatin", "아토르바스타틴"],
+			"activeIngredients": ["atorvastatin"],
+			"cautions": ["복용 중인 다른 처방약/건강기능식품이 있으면 병용 전 전문가 상담이 필요해요."]
 		},
 		{
-			"id": "aspirin",
-			"brandNameKo": "아스피린",
-			"genericName": "aspirin",
-			"aliases": ["ASPIRIN"],
-			"ingredients": ["aspirin"],
-			"usage": "진통·해열·항혈소판(용량에 따라 상이)",
-			"notes": [
-				"출혈 위험이 증가할 수 있어 병용 약물이 있는 경우 확인이 필요합니다.",
-				"어린이/청소년은 특정 질환에서 주의가 필요합니다."
-			]
-		},
-		{
-			"id": "omeprazole",
-			"brandNameKo": "오메프라졸",
-			"genericName": "omeprazole",
-			"aliases": ["OMEPRAZOLE", "오메프라졸캡슐"],
-			"ingredients": ["omeprazole"],
-			"usage": "위산분비억제(PPI)",
-			"notes": [
-				"일부 약물의 흡수/대사에 영향을 줄 수 있습니다."
-			]
+			"name": "센트룸",
+			"aliases": ["센트룸", "centrum", "멀티비타민", "multivitamin"],
+			"activeIngredients": ["multivitamin", "minerals"],
+			"cautions": ["다른 종합영양제와 함께 복용하면 성분이 중복될 수 있어요."]
 		}
 	]
 }

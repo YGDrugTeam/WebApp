@@ -1,73 +1,71 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import { pickBestOcrCandidate } from '../utils/ocrProcessor';
+import { analyzePill } from '../api/pillApi';
 
-function CameraCapture({ onPillDetected }) {
-    const [isLoading, setIsLoading] = useState(false);
+const CameraCapture = ({ onPillDetected }) => {
+    const [loading, setLoading] = useState(false);
+    const [mode, setMode] = useState('auto');
+    const [debug, setDebug] = useState(false);
 
-    const handleCapture = async (e) => {
-        const file = e.target.files[0];
+    const handleFileChange = async (e) => {
+        const inputEl = e?.target;
+        const file = inputEl?.files?.[0];
         if (!file) return;
-        
-        setIsLoading(true);
-        
-        const formData = new FormData();
-        formData.append('file', file, 'pill.jpg');
-        
-        try {
-            const response = await axios.post('http://localhost:8000/analyze', formData);
-            const ocrText = response.data.pill_name;
-            const pillName = pickBestOcrCandidate(ocrText);
 
-            if (pillName && pillName.trim()) {
-                onPillDetected(pillName.trim());
-                alert(`약 인식 완료: ${pillName}`);
-            } else {
-                alert("약 이름을 인식하지 못했습니다.");
-            }
+        setLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const data = await analyzePill(formData, { mode, debug });
+            if (!data) return;
+            // data: { pill_name, ocr_text? }
+            if (typeof onPillDetected === 'function') onPillDetected(data);
         } catch (error) {
-            console.error("OCR 실패:", error);
-            alert("약 인식에 실패했습니다. 백엔드 서버가 실행 중인지 확인하세요.");
+            console.error("분석 실패", error);
         } finally {
-            setIsLoading(false);
+            setLoading(false);
+            // Allow selecting the same file again to re-run OCR.
+            try {
+                if (inputEl) inputEl.value = '';
+            } catch {
+                // ignore
+            }
         }
     };
-    
+
     return (
-        <div style={{ marginBottom: '20px' }}>
-            <label style={{
-                display: 'block',
-                padding: '15px',
-                backgroundColor: '#4299E1',
-                color: 'white',
-                textAlign: 'center',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '18px',
-                fontWeight: 'bold'
-            }}>
-                사진으로 약 등록하기
-                <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="environment"
-                    onChange={handleCapture}
-                    disabled={isLoading}
-                    style={{ display: 'none' }}
-                />
+        <div style={{ border: '2px dashed #ccc', padding: '20px' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontWeight: 700 }}>인식 모드</span>
+                <select value={mode} onChange={(e) => setMode(e.target.value)} disabled={loading}>
+                    <option value="auto">자동(상자+각인)</option>
+                    <option value="box">상자/라벨 텍스트</option>
+                    <option value="pill">알약 각인(영문/숫자)</option>
+                </select>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+                    <input
+                        type="checkbox"
+                        checked={debug}
+                        onChange={(e) => setDebug(e.target.checked)}
+                        disabled={loading}
+                    />
+                    <span style={{ fontSize: 12, color: '#4A5568' }}>디버그</span>
+                </label>
+                <span style={{ fontSize: 12, color: '#666' }}>
+                    {mode === 'pill'
+                        ? '각인이 화면에 크게 보이게 가까이 촬영'
+                        : mode === 'box'
+                            ? '라벨이 정면으로 오게, 반사 줄이기'
+                            : '상자/각인 둘 다 시도'}
+                </span>
+            </div>
+
+            <label style={{ cursor: 'pointer' }}>
+                {loading ? "🔄 사진 분석 중..." : "📷 사진으로 약 등록하기"}
+                <input type="file" accept="image/*" onChange={handleFileChange} hidden disabled={loading} />
             </label>
-            {isLoading && (
-                <p style={{ 
-                    textAlign: 'center', 
-                    fontSize: '18px', 
-                    color: '#4299E1',
-                    marginTop: '10px' 
-                }}>
-                    분석 중...
-                </p>
-            )}
         </div>
     );
-}
+};
 
 export default CameraCapture;

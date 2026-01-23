@@ -1,88 +1,197 @@
 import drugDatabase from '../data/drugDatabase.json';
-import { normalizeText } from './ocrProcessor';
+import medicalKnowledge from '../data/medicalKnowledge.json';
+import { getMfdsCachedDrugs } from './mfdsCache';
 
-function levenshteinDistance(a, b) {
-	const s = a ?? '';
-	const t = b ?? '';
-	if (s === t) return 0;
-	if (!s) return t.length;
-	if (!t) return s.length;
+function normalize(value) {
+	return String(value ?? '')
+		.toLowerCase()
+		.replace(/\(.*?\)/g, ' ')
+		.replace(/[^0-9a-zA-Z가-힣\s.+-]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
 
-	const dp = Array.from({ length: s.length + 1 }, () => new Array(t.length + 1));
-	for (let i = 0; i <= s.length; i += 1) dp[i][0] = i;
-	for (let j = 0; j <= t.length; j += 1) dp[0][j] = j;
+function scoreMatch(query, target) {
+	if (!query || !target) return 0;
+	if (query === target) return 100;
+	if (target.includes(query)) return 85;
+	if (query.includes(target)) return 80;
 
-	for (let i = 1; i <= s.length; i += 1) {
-		for (let j = 1; j <= t.length; j += 1) {
-			const cost = s[i - 1] === t[j - 1] ? 0 : 1;
-			dp[i][j] = Math.min(
-				dp[i - 1][j] + 1,
-				dp[i][j - 1] + 1,
-				dp[i - 1][j - 1] + cost
-			);
+	// simple token overlap
+	const qTokens = new Set(query.split(' ').filter(Boolean));
+	const tTokens = new Set(target.split(' ').filter(Boolean));
+	if (qTokens.size === 0 || tTokens.size === 0) return 0;
+	let inter = 0;
+	for (const t of qTokens) if (tTokens.has(t)) inter += 1;
+	const union = qTokens.size + tTokens.size - inter;
+	return Math.round((inter / union) * 60);
+}
+
+function getBrandDictionary() {
+	const dict = medicalKnowledge?.brandDictionary;
+	return Array.isArray(dict) ? dict : [];
+}
+
+function matchBrand(rawText) {
+	const q = normalize(rawText);
+	if (!q) return null;
+
+	const dict = getBrandDictionary();
+	let best = null;
+	let bestScore = 0;
+	for (const entry of dict) {
+		const brand = normalize(entry?.brand);
+		if (!brand) continue;
+		const s = scoreMatch(q, brand);
+		if (s > bestScore) {
+			bestScore = s;
+			best = entry;
 		}
 	}
 
-	return dp[s.length][t.length];
+	if (!best || bestScore < 60) return null;
+	const ingredients = Array.isArray(best.ingredients) ? best.ingredients.filter(Boolean) : [];
+	return { brand: best.brand, category: best.category, ingredients, score: bestScore };
 }
 
-function similarityScore(a, b) {
-	const na = normalizeText(a);
-	const nb = normalizeText(b);
-	if (!na || !nb) return 0;
-	if (na === nb) return 1;
-	if (na.includes(nb) || nb.includes(na)) return 0.86;
-	const dist = levenshteinDistance(na, nb);
-	const maxLen = Math.max(na.length, nb.length);
-	return Math.max(0, 1 - dist / maxLen);
+function findDrugByIngredients(ingredients) {
+	const items = Array.isArray(drugDatabase?.drugs) ? drugDatabase.drugs : [];
+	if (!Array.isArray(ingredients) || ingredients.length === 0 || items.length === 0) return null;
+
+	const ingSet = new Set(ingredients.map((x) => normalize(x)));
+	let best = null;
+	let bestScore = 0;
+
+	for (const drug of items) {
+		const actives = Array.isArray(drug?.activeIngredients) ? drug.activeIngredients : [];
+		if (actives.length === 0) continue;
+		let overlap = 0;
+		for (const a of actives) {
+			if (ingSet.has(normalize(a))) overlap += 1;
+		}
+		if (overlap === 0) continue;
+		// prefer exact/full ingredient match
+		const s = overlap * 40 + (overlap === ingSet.size ? 30 : 0);
+		if (s > bestScore) {
+			bestScore = s;
+			best = drug;
+		}
+	}
+
+	return best ? { drug: best, score: bestScore } : null;
 }
 
-function getDrugSearchKeys(drug) {
-	return [drug.brandNameKo, drug.genericName, ...(drug.aliases ?? [])].filter(Boolean);
-}
+export function matchDrug(rawText) {
+	const q = normalize(rawText);
+	if (!q) return null;
 
-export function matchDrugName(input) {
-	const rawInput = (input ?? '').toString().trim();
-	const normalizedInput = normalizeText(rawInput);
+	const items = Array.isArray(drugDatabase?.drugs) ? drugDatabase.drugs : [];
 
-	if (!normalizedInput) {
+	let best = null;
+	let bestScore = 0;
+
+	for (const drug of items) {
+		const nameScore = scoreMatch(q, normalize(drug.name));
+		let aliasScore = 0;
+		for (const alias of drug.aliases ?? []) {
+			aliasScore = Math.max(aliasScore, scoreMatch(q, normalize(alias)));
+		}
+		const score = Math.max(nameScore, aliasScore);
+		if (score > bestScore) {
+			bestScore = score;
+			best = drug;
+		}
+	}
+
+	// If local DB match is weak, try MFDS cached names (from previous searches)
+	if (!best || bestScore < 60) {
+		const mfdsItems = getMfdsCachedDrugs();
+		let mfdsBest = null;
+		let mfdsBestScore = 0;
+		for (const it of mfdsItems) {
+			const name = String(it?.itemName ?? '').trim();
+			if (!name) continue;
+			const s = scoreMatch(q, normalize(name));
+			if (s > mfdsBestScore) {
+				mfdsBestScore = s;
+				mfdsBest = it;
+			}
+		}
+
+		if (mfdsBest && mfdsBestScore >= 70) {
+			return {
+				canonicalName: String(mfdsBest.itemName ?? rawText).trim(),
+				matched: true,
+				score: mfdsBestScore,
+				drug: null,
+				inferred: { source: 'mfdsCache', entpName: mfdsBest.entpName, itemSeq: mfdsBest.itemSeq },
+			};
+		}
+	}
+
+	if (!best) {
+		const brandHit = matchBrand(rawText);
+		if (brandHit) {
+			const byIng = findDrugByIngredients(brandHit.ingredients);
+			if (byIng?.drug) {
+				return {
+					canonicalName: byIng.drug.name,
+					matched: true,
+					score: Math.max(70, brandHit.score),
+					drug: byIng.drug,
+					inferred: { source: 'brandDictionary', brand: brandHit.brand, category: brandHit.category, ingredients: brandHit.ingredients },
+				};
+			}
+			return {
+				canonicalName: String(rawText ?? '').trim(),
+				matched: false,
+				score: brandHit.score,
+				drug: null,
+				inferred: { source: 'brandDictionary', brand: brandHit.brand, category: brandHit.category, ingredients: brandHit.ingredients },
+			};
+		}
+		return { canonicalName: rawText.trim(), matched: false, score: 0, drug: null };
+	}
+
+	const matched = bestScore >= 60;
+	if (matched) {
 		return {
-			input: rawInput,
-			normalizedInput,
-			best: null,
-			candidates: []
+		canonicalName: matched ? best.name : rawText.trim(),
+		matched,
+		score: bestScore,
+		drug: best,
 		};
 	}
 
-	const scored = (drugDatabase.drugs ?? []).map((drug) => {
-		const keys = getDrugSearchKeys(drug);
-		let bestKey = null;
-		let bestScore = 0;
-		for (const key of keys) {
-			const score = similarityScore(rawInput, key);
-			if (score > bestScore) {
-				bestScore = score;
-				bestKey = key;
-			}
+	const brandHit = matchBrand(rawText);
+	if (brandHit) {
+		const byIng = findDrugByIngredients(brandHit.ingredients);
+		if (byIng?.drug) {
+			return {
+				canonicalName: byIng.drug.name,
+				matched: true,
+				score: Math.max(bestScore, brandHit.score, 70),
+				drug: byIng.drug,
+				inferred: { source: 'brandDictionary', brand: brandHit.brand, category: brandHit.category, ingredients: brandHit.ingredients },
+			};
 		}
-		return { drug, score: bestScore, matchedBy: bestKey };
-	});
-
-	scored.sort((a, b) => b.score - a.score);
-	const top = scored[0];
-	const candidates = scored.slice(0, 5).filter((c) => c.score > 0.25);
+		return {
+			canonicalName: String(rawText ?? '').trim(),
+			matched: false,
+			score: Math.max(bestScore, brandHit.score),
+			drug: null,
+			inferred: { source: 'brandDictionary', brand: brandHit.brand, category: brandHit.category, ingredients: brandHit.ingredients },
+		};
+	}
 
 	return {
-		input: rawInput,
-		normalizedInput,
-		best: top && top.score >= 0.5 ? top : null,
-		candidates
+		canonicalName: rawText.trim(),
+		matched: false,
+		score: bestScore,
+		drug: null,
 	};
 }
 
-export function formatDrugDisplay(drugItem) {
-	if (!drugItem) return '';
-	const matched = drugItem.match?.drug;
-	if (matched) return matched.brandNameKo;
-	return drugItem.rawName;
+export function getDrugDatabase() {
+	return drugDatabase;
 }

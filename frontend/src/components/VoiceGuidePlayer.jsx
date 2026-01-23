@@ -1,252 +1,168 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
-import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
+import React, { useMemo, useState } from 'react';
+import useSpeechSynthesis from '../hooks/useSpeechSynthesis';
 
-function buildSummary(drugItems, interactionResult) {
-	const items = Array.isArray(drugItems) ? drugItems : [];
-	const warnings = interactionResult?.warnings ?? [];
-
-	const names = items
-		.map((i) => i.match?.drug?.brandNameKo ?? i.rawName)
-		.filter(Boolean);
-
-	const intro = names.length ? `등록된 약은 ${names.join(', ')} 입니다.` : '등록된 약이 없습니다.';
-
-	if (warnings.length === 0) {
-		return `${intro} 현재 데이터 기준으로 큰 병용 경고는 없습니다. 그래도 복용 전에는 전문가와 상담하세요.`;
-	}
-
-	const top = warnings[0];
-	const countText = warnings.length === 1 ? '1건의 경고가 있습니다.' : `${warnings.length}건의 경고가 있습니다.`;
-	return `${intro} ${countText} 가장 중요한 경고는 ${top.title} 입니다. ${top.message} 안전을 위해 의사 또는 약사와 상담하세요.`;
+function normalizeString(value) {
+	return String(value ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-export default function VoiceGuidePlayer({ drugItems, interactionResult }) {
-	const [preferredGender, setPreferredGender] = useState('female');
-	const [isLoading, setIsLoading] = useState(false);
-	const [audioUrl, setAudioUrl] = useState(null);
-	const [backendError, setBackendError] = useState(null);
-	const [ttsStatus, setTtsStatus] = useState(null);
-	const audioRef = useRef(null);
-	const azureConfigured = Boolean(ttsStatus?.azure?.configured);
+export default function VoiceGuidePlayer({ pillList, interactions, aiReport, voiceGender = 'female', onVoiceGenderChange }) {
+	const { supported, speaking, speak, cancel, voices, voicesLoaded, refreshVoices } = useSpeechSynthesis({ lang: 'ko-KR' });
+	const [showDiagnostics, setShowDiagnostics] = useState(false);
 
-	useEffect(() => {
-		try {
-			const stored = window.localStorage.getItem('pillSafe.voiceGender');
-			if (stored === 'female' || stored === 'male') setPreferredGender(stored);
-		} catch {
-			// ignore
+	const script = useMemo(() => {
+		const pills = (pillList ?? []).filter(Boolean);
+		const warningCount = interactions?.warnings?.length ?? 0;
+		const cautionCount = interactions?.cautions?.length ?? 0;
+
+		if (pills.length === 0) {
+			return '안녕하세요. 약 이름을 입력하거나 사진으로 약을 등록해 주세요.';
 		}
-	}, []);
 
-	useEffect(() => {
-		let cancelled = false;
-		(async () => {
-			try {
-				const res = await axios.get('http://localhost:8000/tts/status');
-				if (!cancelled) setTtsStatus(res?.data ?? null);
-			} catch {
-				if (!cancelled) setTtsStatus(null);
-			}
-		})();
+		const base = `현재 등록된 약은 ${pills.join(', ')} 입니다.`;
+		const warn = warningCount > 0 ? `경고가 ${warningCount}건 있습니다. 반드시 확인하세요.` : '치명적인 경고는 현재 없습니다.';
+		const caution = cautionCount > 0 ? `주의 사항이 ${cautionCount}건 있습니다.` : '';
+		const reportHint = aiReport ? 'AI 리포트도 함께 확인해 주세요.' : '';
+		return [base, warn, caution, reportHint].filter(Boolean).join(' ');
+	}, [pillList, interactions, aiReport]);
 
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+	if (!supported) return null;
 
-	useEffect(() => {
-		try {
-			window.localStorage.setItem('pillSafe.voiceGender', preferredGender);
-		} catch {
-			// ignore
-		}
-	}, [preferredGender]);
-
-	const { supported, speak, cancel, voiceName } = useSpeechSynthesis({ preferredGender });
-
-	const summary = useMemo(() => buildSummary(drugItems, interactionResult), [drugItems, interactionResult]);
-
-	useEffect(() => {
-		return () => {
-			if (audioUrl) URL.revokeObjectURL(audioUrl);
-		};
-	}, [audioUrl]);
-
-	const stopAudio = () => {
-		try {
-			if (audioRef.current) {
-				audioRef.current.pause();
-				audioRef.current.currentTime = 0;
-			}
-		} catch {
-			// ignore
-		}
-	};
-
-	const playViaBackendTts = async () => {
-		setIsLoading(true);
-		setBackendError(null);
-		stopAudio();
-		cancel();
-
-		try {
-			const response = await axios.post(
-				'http://localhost:8000/tts',
-				{ text: summary, gender: preferredGender },
-				{ responseType: 'blob' }
-			);
-
-			const url = URL.createObjectURL(response.data);
-			if (audioUrl) URL.revokeObjectURL(audioUrl);
-			setAudioUrl(url);
-
-			// 다음 렌더에서 ref가 붙을 수 있어 즉시/지연 둘 다 시도
-			setTimeout(() => {
-				if (audioRef.current) {
-					audioRef.current.play().catch(() => {
-						// autoplay 정책 등으로 실패할 수 있음
-					});
-				}
-			}, 0);
-		} catch (e) {
-			const status = e?.response?.status;
-			let detail = null;
-			try {
-				if (e?.response?.data instanceof Blob) {
-					detail = await e.response.data.text();
-				}
-			} catch {
-				// ignore
-			}
-
-			const raw = `${detail || ''}`;
-			const lower = raw.toLowerCase();
-
-			let friendly = '서버 TTS 생성에 실패했습니다.';
-			if (lower.includes('azure=not configured')) {
-				friendly = 'Azure TTS가 설정되지 않았습니다. 서버에 AZURE_SPEECH_KEY/AZURE_SPEECH_REGION을 설정해 주세요.';
-			} else if (lower.includes('403')) {
-				friendly = '현재 네트워크/환경에서 Edge TTS 접속이 차단된 것으로 보입니다(403). Azure TTS 설정을 권장합니다.';
-			} else if (status === 502) {
-				friendly = 'TTS 제공자(Edge/Azure) 호출에 실패했습니다. 잠시 후 다시 시도하거나 Azure TTS 설정을 확인해 주세요.';
-			}
-
-			setBackendError({
-				title: friendly,
-				technical: `요청 실패${status ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}`
-			});
-
-			// 폴백: 브라우저 TTS
-			speak(summary);
-		} finally {
-			setIsLoading(false);
-		}
-	};
-
-	if (!supported) {
-		return (
-			<div className="card muted">
-				이 브라우저는 음성 안내(Web Speech API)를 지원하지 않습니다.
-			</div>
-		);
-	}
+	const koVoices = (voices ?? []).filter((v) => (v?.lang || '').toLowerCase().startsWith('ko'));
+	const maleHints = ['injoon', 'in joon', '인준', 'male', 'man', 'minjun', '민준'];
+	const femaleHints = ['sunhi', 'sun hi', '선희', 'heami', 'female', 'woman'];
+	const hasKoMale = koVoices.some((v) => maleHints.some((h) => normalizeString(v?.name).includes(h)));
+	const hasKoFemale = koVoices.some((v) => femaleHints.some((h) => normalizeString(v?.name).includes(h)));
 
 	return (
-		<div className="card">
-			<div className="card__row">
-				<div>
-					<div className="card__title">음성 안내</div>
-					<div className="card__subtitle">
-						서버 TTS(Edge/Azure)로 음성을 생성합니다. {voiceName ? `(브라우저 폴백 보이스: ${voiceName})` : ''}
+		<section className="card">
+			<h3 style={{ marginTop: 0 }}>음성 안내</h3>
+			<p style={{ marginTop: 0, color: '#4A5568' }}>버튼을 누르면 현재 상태를 요약해 읽어드려요.</p>
+			<div className="btn-row" style={{ marginTop: 6, alignItems: 'center' }}>
+				<button
+					type="button"
+					onClick={() => {
+						try { refreshVoices?.(); } catch { /* ignore */ }
+					}}
+				>
+					보이스 새로고침
+				</button>
+				<button type="button" onClick={() => setShowDiagnostics((v) => !v)} style={{ marginLeft: 'auto' }}>
+					{showDiagnostics ? '보이스 목록 닫기' : '보이스 목록 보기'}
+				</button>
+			</div>
+
+			{showDiagnostics && (
+				<div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: '1px solid #EDF2F7', background: '#FAFAFA' }}>
+					<div className="meta" style={{ marginTop: 0 }}>
+						보이스 로딩됨: <b>{voicesLoaded ? '예' : '아니오'}</b> / 전체: <b>{voices?.length ?? 0}</b> / ko-KR 계열: <b>{koVoices.length}</b>
+					</div>
+					<div className="meta" style={{ marginTop: 6 }}>
+						한국어 여성 힌트 감지: <b style={{ color: hasKoFemale ? '#2F855A' : '#C53030' }}>{hasKoFemale ? '예' : '아니오'}</b>
+						<span style={{ marginLeft: 12 }}>
+							한국어 남성 힌트 감지: <b style={{ color: hasKoMale ? '#2F855A' : '#C53030' }}>{hasKoMale ? '예' : '아니오'}</b>
+						</span>
+					</div>
+					<div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto' }}>
+						<table style={{ width: '100%', borderCollapse: 'collapse' }}>
+							<thead>
+								<tr>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>이름</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>언어</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>로컬</th>
+									<th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #E2E8F0' }}>기본</th>
+								</tr>
+							</thead>
+							<tbody>
+								{(voices ?? []).map((v) => (
+									<tr key={`${v?.name}-${v?.lang}`}> 
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.name}</td>
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.lang}</td>
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.localService ? '예' : '아니오'}</td>
+										<td style={{ padding: '6px 8px', borderBottom: '1px solid #EDF2F7' }}>{v?.default ? '예' : '아니오'}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+					<div className="meta" style={{ marginTop: 10 }}>
+						팁: Windows 보이스팩 설치/변경 후에는 브라우저(Edge/Chrome)를 완전히 종료했다가 다시 열어야 목록이 갱신되는 경우가 많습니다.
 					</div>
 				</div>
-				<div className="row-actions">
-					<button className="btn" type="button" onClick={playViaBackendTts} disabled={isLoading}>
-						{isLoading ? '생성 중...' : '요약 듣기'}
-					</button>
+			)}
+			<div className="btn-row" style={{ alignItems: 'center' }}>
+				<span style={{ color: '#4A5568' }}>목소리</span>
+				<div className="segmented" role="group" aria-label="목소리 성별">
 					<button
-						className="btn btn-secondary"
 						type="button"
+						className={voiceGender === 'female' ? 'active' : ''}
 						onClick={() => {
-							stopAudio();
-							cancel();
+							onVoiceGenderChange?.('female');
+							speak(script, {
+								gender: 'female',
+								engine: 'auto',
+								fallbackToBrowserOnServerFail: true,
+								preferredNames: ['SunHi', '선희', 'Heami', 'female'],
+							});
 						}}
 					>
-						정지
+						여성
+					</button>
+					<button
+						type="button"
+						className={voiceGender === 'male' ? 'active' : ''}
+						onClick={() => {
+							onVoiceGenderChange?.('male');
+							speak(script, {
+								gender: 'male',
+								engine: 'auto',
+								fallbackToBrowserOnServerFail: true,
+								preferredNames: ['InJoon', '인준', 'Minjun', '민준', 'Google 한국어', 'ko-KR-Standard-C', 'male'],
+							});
+						}}
+						disabled={speaking}						
+					>
+						남성
 					</button>
 				</div>
 			</div>
 
-			<div className="segmented" style={{ marginTop: 10 }}>
+			<div className="btn-row" style={{ marginTop: 10 }}>
 				<button
+					onClick={() =>
+						speak(script, {
+							gender: voiceGender,
+							engine: 'auto',
+							fallbackToBrowserOnServerFail: true,
+							preferredNames: voiceGender === 'male' ? ['InJoon', '인준', 'male'] : ['SunHi', '선희', 'female'],
+						})
+					}
+					disabled={speaking}
 					type="button"
-					className={preferredGender === 'female' ? 'segmented__btn segmented__btn--active' : 'segmented__btn'}
-					onClick={() => {
-						stopAudio();
-						cancel();
-						setPreferredGender('female');
-					}}
 				>
-					여성 목소리
+					{speaking ? '재생 중…' : '요약 읽기'}
 				</button>
 				<button
+					onClick={() =>
+						speak(script, { gender: 'female', engine: 'auto', fallbackToBrowserOnServerFail: true, preferredNames: ['SunHi', '선희', 'female'] })
+					}
+					disabled={speaking}
 					type="button"
-					className={preferredGender === 'male' ? 'segmented__btn segmented__btn--active' : 'segmented__btn'}
-					onClick={() => {
-						stopAudio();
-						cancel();
-						setPreferredGender('male');
-					}}
 				>
-					남성 목소리{!azureConfigured ? <span className="badge" style={{ marginLeft: 8 }}>Azure 권장</span> : null}
+					여성으로 읽기
+				</button>
+				<button
+					onClick={() =>
+						speak(script, { gender: 'male', engine: 'auto', fallbackToBrowserOnServerFail: true, preferredNames: ['InJoon', '인준', 'male'] })
+					}
+					disabled={speaking}
+					type="button"
+				>
+					남성으로 읽기
+				</button>
+				<button onClick={cancel} disabled={!speaking} type="button">
+					중지
 				</button>
 			</div>
-
-			{preferredGender === 'male' && !azureConfigured ? (
-				<div className="callout callout--warning" style={{ marginTop: 10 }}>
-					<div className="callout__title">남성 목소리 안정성 안내</div>
-					<div className="callout__body">
-						현재 환경에서는 Edge TTS가 차단(403)되는 경우가 있어, 남성 보이스는 Azure TTS 설정을 권장합니다.
-					</div>
-				</div>
-			) : null}
-
-			{ttsStatus ? (
-				<div className="callout callout--info" style={{ marginTop: 10 }}>
-					<div className="callout__title">서버 TTS 상태</div>
-					<div className="callout__body">
-						Edge: 사용 시도함 · Azure: {ttsStatus.azure?.configured ? '설정됨' : '미설정'}
-					</div>
-					{!ttsStatus.azure?.configured ? (
-						<div className="callout__body" style={{ marginTop: 6 }}>
-								PowerShell 예시: <span className="mono">$env:AZURE_SPEECH_KEY="YOUR_KEY"</span> /{' '}
-								<span className="mono">$env:AZURE_SPEECH_REGION="koreacentral"</span>
-								<span className="mono" style={{ display: 'block', marginTop: 6 }}>$env:AZURE_API_KEY="YOUR_KEY"</span>
-								<span className="mono" style={{ display: 'block', marginTop: 4 }}>$env:AZURE_REGION="koreacentral"</span>
-						</div>
-					) : null}
-				</div>
-			) : null}
-
-			{backendError ? (
-				<div className="callout callout--warning" style={{ marginTop: 10 }}>
-					<div className="callout__title">{backendError.title}</div>
-					<div className="callout__body">브라우저 음성으로 대신 안내합니다.</div>
-					<details style={{ marginTop: 8 }}>
-						<summary className="muted">기술 정보 보기</summary>
-						<div className="mono" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{backendError.technical}</div>
-					</details>
-				</div>
-			) : null}
-
-			{audioUrl ? (
-				<audio ref={audioRef} src={audioUrl} controls style={{ width: '100%', marginTop: 10 }} />
-			) : null}
-
-			<div className="muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
-				{summary}
-			</div>
-		</div>
+		</section>
 	);
 }

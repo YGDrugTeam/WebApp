@@ -1,41 +1,33 @@
-export function normalizeText(value) {
-	if (!value) return '';
-	return String(value)
-		.toLowerCase()
-		.replace(/\s+/g, '')
-		.replace(/[\u200B-\u200D\uFEFF]/g, '')
-		.replace(/[()[\]{}<>,.~`'"!?@#$%^&*+=:;\\|/-]/g, '');
+function normalize(value) {
+	return String(value ?? '')
+	.replace(/[()[\]{}]/g, ' ')
+		.replace(/[^0-9a-zA-Z가-힣\s.+-]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
 }
 
-export function extractOcrCandidates(rawOcrText) {
-	const raw = (rawOcrText ?? '').toString();
-	if (!raw.trim()) return [];
+export function normalizeOcrText(text) {
+	return normalize(text);
+}
 
-	const tokens = raw
-		.split(/[\n\r\t\s]+/)
-		.flatMap((t) => t.split(/[()[\]{}<>,.~`'"!?@#$%^&*+=:;\\|/]/))
+export function extractDrugCandidates(text) {
+	const normalized = normalize(text);
+	if (!normalized) return [];
+
+	const tokens = normalized
+		.split(/\s|,|\/|\n|\t|\r/)
 		.map((t) => t.trim())
 		.filter(Boolean);
 
-	const unique = new Map();
-	for (const token of tokens) {
-		const normalized = normalizeText(token);
-		if (!normalized) continue;
-		if (!unique.has(normalized)) unique.set(normalized, token);
-	}
+	// preserve longer chunks too (e.g., "타이레놀 500mg")
+	const chunks = normalized
+		.split(/\n|\r/)
+		.map((line) => line.trim())
+		.filter(Boolean);
 
-	const candidates = Array.from(unique.values());
+	const candidates = [...new Set([...chunks, ...tokens])]
+		.filter((c) => c.length >= 2)
+		.slice(0, 25);
 
-	candidates.sort((a, b) => {
-		const na = normalizeText(a).length;
-		const nb = normalizeText(b).length;
-		return nb - na;
-	});
-
-	return candidates.slice(0, 12);
-}
-
-export function pickBestOcrCandidate(rawOcrText) {
-	const candidates = extractOcrCandidates(rawOcrText);
-	return candidates[0] ?? (rawOcrText ?? '').toString().trim();
+	return candidates;
 }

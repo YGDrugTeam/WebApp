@@ -1,45 +1,65 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { blobToWav } from '../utils/audioWav';
+import React, { useEffect, useMemo, useState } from 'react';
+import { searchMfdsDrugs } from '../api/pillApi';
+import { clearMfdsCache, getMfdsCachedDrugs, upsertMfdsDrugs } from '../utils/mfdsCache';
 
 function DrugInput({ onAdd }) {
     const [inputValue, setInputValue] = useState('');
-    const [sttStatus, setSttStatus] = useState(null);
-    const [sttError, setSttError] = useState(null);
-    const [isServerSttLoading, setIsServerSttLoading] = useState(false);
-
-    const { supported, isListening, lastTranscript, error, start, stop } = useSpeechRecognition({ lang: 'ko-KR' });
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState('');
+    const [mfdsResults, setMfdsResults] = useState([]);
+    const [cachedMfds, setCachedMfds] = useState([]);
+    const [showCached, setShowCached] = useState(true);
 
     useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const res = await axios.get('http://localhost:8000/stt/status');
-                if (!cancelled) setSttStatus(res?.data ?? null);
-            } catch {
-                if (!cancelled) setSttStatus(null);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
+        setCachedMfds(getMfdsCachedDrugs());
     }, []);
-
-    useEffect(() => {
-        if (lastTranscript) {
-            setInputValue(lastTranscript);
-        }
-    }, [lastTranscript]);
-
-    useEffect(() => {
-        if (error) setSttError(error);
-    }, [error]);
 
     const handleSubmit = () => {
         if (inputValue.trim()) {
             onAdd(inputValue);
             setInputValue(''); // 입력창 비우기
+        }
+    };
+
+    const canSearch = useMemo(() => String(inputValue ?? '').trim().length >= 2, [inputValue]);
+
+    const handleMfdsSearch = async () => {
+        const q = String(inputValue ?? '').trim();
+        if (q.length < 2) return;
+        setIsSearching(true);
+        setSearchError('');
+        try {
+            const data = await searchMfdsDrugs(q, 10, { scanPages: 200 });
+            if (data?.ok === false) {
+                setMfdsResults([]);
+                setSearchError(data?.detail || data?.error || 'MFDS 검색 실패');
+                return;
+            }
+            const items = Array.isArray(data?.items) ? data.items : [];
+            setMfdsResults(items);
+            if (items.length > 0) {
+                upsertMfdsDrugs(items);
+                setCachedMfds(getMfdsCachedDrugs());
+            }
+            if (items.length === 0) setSearchError('검색 결과가 없습니다.');
+        } catch (e) {
+            setMfdsResults([]);
+            const status = e?.response?.status;
+            const data = e?.response?.data;
+            const detail =
+                (typeof data?.detail === 'string' && data.detail) ||
+                (typeof data?.error === 'string' && data.error) ||
+                (typeof data?.message === 'string' && data.message) ||
+                (typeof e?.message === 'string' && e.message) ||
+                '';
+
+            if (status) {
+                setSearchError(`MFDS 검색 실패 (HTTP ${status})${detail ? `: ${detail}` : ''}`);
+            } else {
+                setSearchError(`MFDS 검색 실패${detail ? `: ${detail}` : ''}`);
+            }
+        } finally {
+            setIsSearching(false);
         }
     };
 
@@ -49,111 +69,117 @@ function DrugInput({ onAdd }) {
         }
     };
 
-    const recordAndServerStt = async () => {
-        setSttError(null);
-        setIsServerSttLoading(true);
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
-            const chunks = [];
-
-            recorder.ondataavailable = (e) => {
-                if (e?.data && e.data.size > 0) chunks.push(e.data);
-            };
-
-            const stopped = new Promise((resolve) => {
-                recorder.onstop = () => resolve();
-            });
-
-            recorder.start();
-            // 3초만 녹음(보조 기능)
-            setTimeout(() => {
-                try {
-                    recorder.stop();
-                } catch {
-                    // ignore
-                }
-            }, 3000);
-
-            await stopped;
-            stream.getTracks().forEach((t) => t.stop());
-
-            const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
-
-            // webm/ogg 등을 WAV로 변환
-            const wav = await blobToWav(blob);
-
-            const form = new FormData();
-            form.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
-
-            const res = await axios.post('http://localhost:8000/stt', form, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            const text = (res?.data?.text ?? '').toString().trim();
-            if (text) setInputValue(text);
-            else setSttError('인식 결과가 비어있습니다. 조금 더 또렷하게 말씀해 주세요.');
-        } catch (e) {
-            const status = e?.response?.status;
-            let detail = null;
-            try {
-                if (e?.response?.data instanceof Blob) detail = await e.response.data.text();
-                else if (typeof e?.response?.data === 'string') detail = e.response.data;
-            } catch {
-                // ignore
-            }
-
-            setSttError(`음성 인식(STT)에 실패했습니다${status ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}`);
-        } finally {
-            setIsServerSttLoading(false);
-        }
-    };
-
-    const canUseServerStt = Boolean(sttStatus?.azure?.configured);
-
     return (
         <div>
-            <div className="input-row">
-                <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="약 이름을 입력하세요"
-                    onKeyDown={handleKeyPress}
-                />
-
-                {supported ? (
-                    <button
-                        className={isListening ? 'btn btn-secondary' : 'btn btn-secondary'}
-                        type="button"
-                        onClick={() => (isListening ? stop() : start())}
-                        title="브라우저 음성 인식(지원되는 브라우저에서만)"
-                        style={{ whiteSpace: 'nowrap' }}
-                    >
-                        {isListening ? '듣는 중…' : '말로 입력'}
-                    </button>
-                ) : (
-                    <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={recordAndServerStt}
-                        disabled={!canUseServerStt || isServerSttLoading}
-                        title={canUseServerStt ? 'Azure STT로 음성 인식' : 'Azure STT 미설정'}
-                        style={{ whiteSpace: 'nowrap' }}
-                    >
-                        {isServerSttLoading ? '인식 중…' : '말로 입력'}
-                    </button>
-                )}
+            <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder="약 이름을 입력하세요"
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" onClick={handleSubmit}>추가하기</button>
+                <button type="button" onClick={handleMfdsSearch} disabled={!canSearch || isSearching}>
+                    {isSearching ? '검색 중…' : 'MFDS 검색'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setShowCached((v) => !v)}
+                    style={{ marginLeft: 'auto' }}
+                >
+                    {showCached ? '최근 저장 숨기기' : '최근 저장 보기'}
+                </button>
             </div>
 
-            <div className="row-actions" style={{ marginTop: 8 }}>
-                <button className="btn" type="button" onClick={handleSubmit}>추가하기</button>
-            </div>
+            {showCached && cachedMfds.length > 0 && (
+                <div style={{ marginTop: 10, padding: 10, border: '1px solid #E2E8F0', borderRadius: 10, background: 'white' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontWeight: 800 }}>최근 저장된 MFDS 약</div>
+                        <span style={{ fontSize: 12, color: '#718096' }}>(로컬 캐시)</span>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                clearMfdsCache();
+                                setCachedMfds([]);
+                            }}
+                            style={{ marginLeft: 'auto' }}
+                        >
+                            캐시 비우기
+                        </button>
+                    </div>
 
-            {sttError ? (
-                <div className="muted" style={{ marginTop: 8, color: '#C05621' }}>{String(sttError)}</div>
-            ) : null}
+                    <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                        {cachedMfds.slice(0, 8).map((item) => {
+                            const name = String(item?.itemName ?? '').trim();
+                            const entp = String(item?.entpName ?? '').trim();
+                            const seq = String(item?.itemSeq ?? '').trim();
+                            if (!name) return null;
+                            return (
+                                <button
+                                    key={`cached-${seq || name}-${entp}`}
+                                    type="button"
+                                    onClick={() => onAdd(name, { itemSeq: seq || null, entpName: entp || null, source: 'mfdsCache' })}
+                                    style={{
+                                        textAlign: 'left',
+                                        padding: '10px 12px',
+                                        borderRadius: 10,
+                                        border: '1px solid #EDF2F7',
+                                        background: '#F7FAFC',
+                                        cursor: 'pointer',
+                                    }}
+                                    title={seq ? `품목기준코드: ${seq}` : ''}
+                                >
+                                    <div style={{ fontWeight: 900 }}>{name}</div>
+                                    {entp && <div style={{ fontSize: 12, color: '#4A5568' }}>{entp}</div>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {searchError && (
+                <div style={{ marginTop: 8, color: '#B83280', fontSize: 13 }}>
+                    {searchError}
+                </div>
+            )}
+
+            {mfdsResults.length > 0 && (
+                <div style={{ marginTop: 10, padding: 10, border: '1px solid #E2E8F0', borderRadius: 10, background: 'white' }}>
+                    <div style={{ fontWeight: 800, marginBottom: 8 }}>MFDS 검색 결과</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                        {mfdsResults.slice(0, 10).map((item) => {
+                            const name = String(item?.itemName ?? '').trim();
+                            const entp = String(item?.entpName ?? '').trim();
+                            const seq = String(item?.itemSeq ?? '').trim();
+                            if (!name) return null;
+                            return (
+                                <button
+                                    key={`${seq || name}-${entp}`}
+                                    type="button"
+                                    onClick={() => onAdd(name, { itemSeq: seq || null, entpName: entp || null, source: 'mfds' })}
+                                    style={{
+                                        textAlign: 'left',
+                                        padding: '10px 12px',
+                                        borderRadius: 10,
+                                        border: '1px solid #EDF2F7',
+                                        background: '#FAFAFA',
+                                        cursor: 'pointer',
+                                    }}
+                                    title={seq ? `품목기준코드: ${seq}` : ''}
+                                >
+                                    <div style={{ fontWeight: 900 }}>{name}</div>
+                                    {entp && <div style={{ fontSize: 12, color: '#4A5568' }}>{entp}</div>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#718096' }}>
+                        더 많은 결과가 필요하면 검색어를 더 구체적으로 입력해 주세요.
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,21 +1,37 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Virtual environments
 .venv/
+.venv-gpu/
 venv/
+ENV/
 
-# Local env files (DO NOT COMMIT)
-.env
-.env.*
-backend/.env
-backend/.env.*
+# Bundles / exports
+colab_bundle.zip
 
-# Backend temp
-backend/.tmp/
-
-# Node
-node_modules/
-
-# OS
+# OS / editor
 .DS_Store
 Thumbs.db
+
+# Local secrets / env
+frontend/.env
+.env
+
+# Generated audio artifacts
+backend/tts_test_*.mp3
+
+# Local backend logs
+backend/*.log
+
+# Local data exports
+backend/data/
+
+# RAG generated index artifacts
+backend/rag_agent/*.pkl
+
+# Local debug artifacts (generated during development)
+.git-*.txt
+.temp-*.txt

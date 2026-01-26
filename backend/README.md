@@ -50,3 +50,16 @@ Optional override:
 
 - Set `OCR_USE_GPU=1` to force attempting GPU.
 - Set `OCR_USE_GPU=0` to force CPU.
+
+## Secrets / API keys
+
+Do not hardcode keys/endpoints in source code.
+
+1) Copy `backend/.env.example` to `backend/.env`
+2) Fill these variables as needed:
+
+- `AZURE_VISION_KEY`, `AZURE_VISION_ENDPOINT` (OCR)
+- `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (TTS)
+- `MFDS_SERVICE_KEY`, `MFDS_SERVICE_PATH` (MFDS OpenAPI)
+
+`backend/.env` is ignored by git.

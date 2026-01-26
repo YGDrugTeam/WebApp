@@ -42,7 +42,7 @@ class ODCloudOpenAPIClient:
         authorization: str | None = None,
         timeout_s: float = 20.0,
         min_interval_s: float = 0.2,
-        user_agent: str = "pill-safe-ai/1.0 (+https://example.invalid)",
+        user_agent: str = "mediclens/1.0 (+https://example.invalid)",
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._service_key = (service_key or "").strip() or None

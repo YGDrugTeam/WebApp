@@ -70,6 +70,12 @@ export const ragQuery = async (query, options = {}) => {
     if (typeof options?.useTools === 'boolean') {
         payload.use_tools = options.useTools;
     }
+    if (typeof options?.useLocalDb === 'boolean') {
+        payload.use_local_db = options.useLocalDb;
+    }
+    if (typeof options?.useWeb === 'boolean') {
+        payload.use_web = options.useWeb;
+    }
     if (typeof options?.mfdsScanPages === 'number' && Number.isFinite(options.mfdsScanPages)) {
         payload.mfds_scan_pages = options.mfdsScanPages;
     }
@@ -88,6 +94,27 @@ export const ragQuery = async (query, options = {}) => {
             .slice(0, 6);
     }
     const res = await api.post('/rag/query', payload);
+    return res.data;
+};
+
+export const localDbStatus = async () => {
+    const res = await api.get('/localdb/status');
+    return res.data;
+};
+
+export const localDbUpload = async (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.post('/localdb/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+};
+
+export const localDbSearch = async (q) => {
+    const query = String(q ?? '').trim();
+    if (!query) return { ok: false, error: 'query_missing', detail: 'q is required' };
+    const res = await api.get('/localdb/search', { params: { q: query } });
     return res.data;
 };
 

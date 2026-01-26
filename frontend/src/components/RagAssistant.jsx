@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { ragIndex, ragPrompt, ragQuery } from '../api/pillApi';
+import React, { useEffect, useMemo, useState } from 'react';
+import { localDbStatus, localDbUpload, ragIndex, ragPrompt, ragQuery } from '../api/pillApi';
 
 function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
     const [query, setQuery] = useState('');
     const [drugNamesText, setDrugNamesText] = useState('');
     const [useTools, setUseTools] = useState(true);
+    const [useLocalDb, setUseLocalDb] = useState(true);
+    const [useWeb, setUseWeb] = useState(false);
     const [mfdsScanPages, setMfdsScanPages] = useState(2);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -18,6 +20,25 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
     const [showSources, setShowSources] = useState(true);
     const [showPrompt, setShowPrompt] = useState(false);
     const [promptBundle, setPromptBundle] = useState(null);
+
+    const [localDb, setLocalDb] = useState(null);
+    const [localDbBusy, setLocalDbBusy] = useState(false);
+
+    useEffect(() => {
+        let mounted = true;
+        const run = async () => {
+            try {
+                const st = await localDbStatus();
+                if (mounted) setLocalDb(st);
+            } catch {
+                if (mounted) setLocalDb(null);
+            }
+        };
+        run();
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     const canAsk = useMemo(() => String(query ?? '').trim().length >= 2, [query]);
 
@@ -40,6 +61,8 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
                 k: 5,
                 drugNames: useTools ? parsedDrugNames : [],
                 useTools,
+                useLocalDb,
+                useWeb,
                 mfdsScanPages: useTools ? mfdsScanPages : undefined,
                 ageGroup,
                 ageYears,
@@ -154,11 +177,50 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
         );
     })();
 
+    const evidenceGroups = useMemo(() => {
+        const items = Array.isArray(evidence) ? evidence : [];
+        const groups = {
+            official: [],
+            localDb: [],
+            rag: [],
+            other: [],
+        };
+        for (const ev of items) {
+            const src = String(ev?.source ?? '').toUpperCase();
+            if (src === 'MFDS' || src === 'DUR') groups.official.push(ev);
+            else if (src === 'LOCAL_DB') groups.localDb.push(ev);
+            else if (src) groups.other.push(ev);
+            else groups.rag.push(ev);
+        }
+        return groups;
+    }, [evidence]);
+
+    const onUploadLocalDb = async (file) => {
+        if (!file) return;
+        setLocalDbBusy(true);
+        setError('');
+        try {
+            const res = await localDbUpload(file);
+            setLocalDb(res);
+        } catch (e) {
+            const status = e?.response?.status;
+            const data = e?.response?.data;
+            const detail =
+                (typeof data?.detail === 'string' && data.detail) ||
+                (typeof data?.error === 'string' && data.error) ||
+                (typeof e?.message === 'string' && e.message) ||
+                '';
+            setError(status ? `로컬 DB 업로드 실패 (HTTP ${status})${detail ? `: ${detail}` : ''}` : `로컬 DB 업로드 실패${detail ? `: ${detail}` : ''}`);
+        } finally {
+            setLocalDbBusy(false);
+        }
+    };
+
     return (
-        <div style={{ marginTop: 14, padding: 12, border: '1px solid #E2E8F0', borderRadius: 12, background: 'white' }}>
+        <div className="card" style={{ marginTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ fontWeight: 900 }}>RAG 어시스턴트</div>
-                <div style={{ fontSize: 12, color: '#718096' }}>로컬 지식베이스 기반</div>
+                <div style={{ fontWeight: 900 }}>MedicLens 에이전트</div>
+                <div style={{ fontSize: 12, color: '#718096' }}>근거 병합: 로컬 DB + MFDS/DUR + (선택)웹</div>
                 {badge}
                 <button type="button" onClick={rebuildIndex} disabled={isLoading} style={{ marginLeft: 'auto' }}>
                     인덱스 재생성
@@ -197,6 +259,16 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
                     </label>
 
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: '#2D3748' }}>
+                        <input type="checkbox" checked={useLocalDb} onChange={(e) => setUseLocalDb(e.target.checked)} />
+                        로컬 CSV DB 사용
+                    </label>
+
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: '#2D3748' }} title="TAVILY_API_KEY가 설정된 경우에만 동작합니다">
+                        <input type="checkbox" checked={useWeb} onChange={(e) => setUseWeb(e.target.checked)} />
+                        웹 근거(선택)
+                    </label>
+
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: '#2D3748' }}>
                         MFDS 스캔 페이지
                         <input
                             type="number"
@@ -212,6 +284,36 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
                             style={{ width: 80 }}
                         />
                     </label>
+                </div>
+
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #E2E8F0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 800, fontSize: 12, color: '#4A5568' }}>로컬 의약품 CSV</div>
+                        <div style={{ fontSize: 12, color: '#718096' }}>
+                            {localDb?.exists ? (
+                                <span>연결됨 (총 {localDb?.count ?? 0}건)</span>
+                            ) : (
+                                <span>미연결 (CSV 업로드 필요)</span>
+                            )}
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                        <input
+                            type="file"
+                            accept={".csv,text/csv"}
+                            disabled={localDbBusy}
+                            onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                onUploadLocalDb(f);
+                                e.target.value = '';
+                            }}
+                        />
+                        {localDb?.configuredPath && (
+                            <div style={{ fontSize: 12, color: '#718096' }} title={String(localDb.configuredPath)}>
+                                경로: {String(localDb.configuredPath).split('\\').slice(-2).join('\\')}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div style={{ marginTop: 8 }}>
@@ -319,15 +421,31 @@ function RagAssistant({ ageGroup = '', ageYears = '', profileTags = [] }) {
 
                     {showSources && (
                         <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                            {evidence.slice(0, 6).map((ev, idx) => (
-                                <div key={idx} style={{ padding: 10, borderRadius: 10, border: '1px solid #EDF2F7', background: '#FAFAFA' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                                        <div style={{ fontWeight: 800 }}>{String(ev?.field ?? ev?.source ?? '근거')}</div>
-                                        <div style={{ fontSize: 12, color: '#718096' }}>{String(ev?.id ?? '')}</div>
+                            {(
+                                [
+                                    { title: '공식(MFDS/DUR)', items: evidenceGroups.official, tone: '#EBF8FF' },
+                                    { title: '로컬 CSV DB', items: evidenceGroups.localDb, tone: '#F0FFF4' },
+                                    { title: '기타/추론 근거', items: [...evidenceGroups.rag, ...evidenceGroups.other], tone: '#FAFAFA' },
+                                ].filter((g) => (g.items?.length ?? 0) > 0)
+                            ).map((g) => (
+                                <div key={g.title} style={{ padding: 10, borderRadius: 12, border: '1px solid #EDF2F7', background: g.tone }}>
+                                    <div style={{ fontWeight: 900, marginBottom: 8 }}>{g.title} ({g.items.length})</div>
+                                    <div style={{ display: 'grid', gap: 8 }}>
+                                        {g.items.slice(0, 4).map((ev, idx) => (
+                                            <div key={`${g.title}-${idx}`} style={{ padding: 10, borderRadius: 10, border: '1px solid #EDF2F7', background: 'white' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                                                    <div style={{ fontWeight: 800 }}>{String(ev?.field ?? ev?.source ?? '근거')}</div>
+                                                    <div style={{ fontSize: 12, color: '#718096' }}>{String(ev?.id ?? '')}</div>
+                                                </div>
+                                                {ev?.source && (
+                                                    <div style={{ marginTop: 2, fontSize: 11, color: '#718096' }}>source: {String(ev.source)}</div>
+                                                )}
+                                                {ev?.snippet && (
+                                                    <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, fontSize: 13, color: '#2D3748' }}>{String(ev.snippet)}</div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                    {ev?.snippet && (
-                                        <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, fontSize: 13, color: '#2D3748' }}>{String(ev.snippet)}</div>
-                                    )}
                                 </div>
                             ))}
                         </div>

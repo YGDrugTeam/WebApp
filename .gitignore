@@ -18,6 +18,7 @@ Thumbs.db
 
 # Local secrets / env
 frontend/.env
+backend/.env
 .env
 
 # Generated audio artifacts

@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'pillSafe.mfdsCache.v1';
+const STORAGE_KEY = 'mediclens.mfdsCache.v1';
+const LEGACY_STORAGE_KEY = 'pillSafe.mfdsCache.v1';
 const MAX_ITEMS = 2000;
 
 function safeJsonParse(value, fallback) {
@@ -20,7 +21,7 @@ function normalize(value) {
 
 function readCache() {
 	if (typeof window === 'undefined' || !window.localStorage) return { updatedAt: 0, items: [] };
-	const raw = window.localStorage.getItem(STORAGE_KEY);
+	const raw = window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY);
 	if (!raw) return { updatedAt: 0, items: [] };
 	const parsed = safeJsonParse(raw, null);
 	if (!parsed || typeof parsed !== 'object') return { updatedAt: 0, items: [] };
@@ -49,6 +50,7 @@ export function clearMfdsCache() {
 	if (typeof window === 'undefined' || !window.localStorage) return;
 	try {
 		window.localStorage.removeItem(STORAGE_KEY);
+		window.localStorage.removeItem(LEGACY_STORAGE_KEY);
 	} catch {
 		// ignore
 	}

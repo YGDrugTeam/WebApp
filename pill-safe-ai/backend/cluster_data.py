@@ -30,7 +30,7 @@ def run_clustering(data_path, output_path, num_clusters=5000):
     loader = DataLoader(dataset, batch_size=256, num_workers=16, pin_memory=True)
     
     # 특징 추출
-    feature = []
+    features = []
     print("특징 추출 중...")
     with torch.no_grad():
         for inputs, _ in tqdm(loader):

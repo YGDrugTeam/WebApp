@@ -36,3 +36,9 @@ backend/rag_agent/*.pkl
 # Local debug artifacts (generated during development)
 .git-*.txt
 .temp-*.txt
+
+# Experiment artifacts / local outputs
+wandb/
+checkpoints/
+mediclens.db
+missing_codes.log

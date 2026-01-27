@@ -1,15 +1,9 @@
 from flask import Flask, jsonify, make_response, request
 from flask_cors import CORS
-
 from info_service import PillInfoService
 
-try:
-    # When running as a script from backend/ directory
-    from pharmacy_service import PharmacyService, PharmacyServiceError
-except Exception:  # pragma: no cover
-    # When imported as a package (e.g., from backend.app)
-    from .pharmacy_service import PharmacyService, PharmacyServiceError
-
+# 기존의 복잡한 try-except 임포트를 지우고 아래 한 줄로 통일하세요
+from pharmacy_service import PharmacyService, PharmacyServiceError
 
 app = Flask(__name__)
 CORS(app)
@@ -47,7 +41,7 @@ def health():
     return resp
 
 
-@app.route('/pharmacies', methods=['GET'])
+@app.route('/api/pharmacies', methods=['GET'])
 def search_pharmacies():
     """약국 찾기 (실데이터; ODCloud 기반)
 

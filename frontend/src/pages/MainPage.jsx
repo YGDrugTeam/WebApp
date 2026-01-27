@@ -30,6 +30,9 @@ const MainPage = () => {
   const [geoLoading, setGeoLoading] = useState(false);
   const [pharmacySort, setPharmacySort] = useState('relevance'); // relevance | distance
   const [pharmacyAvailable, setPharmacyAvailable] = useState(null); // null | boolean
+  const [pharmacyMapOpen, setPharmacyMapOpen] = useState(false);
+  const [pharmacyMapTarget, setPharmacyMapTarget] = useState(null);
+  const [pharmacyMapState, setPharmacyMapState] = useState({ loading: false, error: '', lat: null, lon: null });
 
   const isDev = Boolean(import.meta?.env?.DEV);
   const [devDiag, setDevDiag] = useState({
@@ -57,6 +60,118 @@ const MainPage = () => {
 
   const FLASK_BASE = String(import.meta?.env?.VITE_FLASK_BASE || '').trim().replace(/\/$/, '');
   const FASTAPI_BASE = String(import.meta?.env?.VITE_FASTAPI_BASE || '').trim().replace(/\/$/, '');
+
+  const _toFloat = (v) => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const _extractLatLonFromItem = (p) => {
+    const directLat = _toFloat(p?.lat ?? p?.latitude);
+    const directLon = _toFloat(p?.lon ?? p?.lng ?? p?.longitude);
+    if (directLat != null && directLon != null) return { lat: directLat, lon: directLon };
+
+    const raw = p?.raw && typeof p.raw === 'object' ? p.raw : null;
+    if (!raw) return { lat: null, lon: null };
+
+    const lat = _toFloat(
+      raw['위도'] ?? raw['LAT'] ?? raw['lat'] ?? raw['Latitude'] ?? raw['latitude'] ?? raw['Y'] ?? raw['y'],
+    );
+    const lon = _toFloat(
+      raw['경도'] ?? raw['LON'] ?? raw['lon'] ?? raw['Longitude'] ?? raw['longitude'] ?? raw['X'] ?? raw['x'],
+    );
+    return { lat: lat ?? null, lon: lon ?? null };
+  };
+
+  const _geocode = async (query) => {
+    const q = String(query || '').trim();
+    if (!q) return null;
+
+    // 1) Kakao geocoder (if SDK is present + services loaded)
+    try {
+      const kakao = typeof window !== 'undefined' ? window.kakao : null;
+      if (kakao?.maps?.services?.Geocoder) {
+        const geocoder = new kakao.maps.services.Geocoder();
+        const result = await new Promise((resolve) => {
+          geocoder.addressSearch(q, (res, status) => resolve({ res, status }));
+        });
+        if (result?.status === kakao.maps.services.Status.OK && Array.isArray(result?.res) && result.res[0]) {
+          const lat = _toFloat(result.res[0].y);
+          const lon = _toFloat(result.res[0].x);
+          if (lat != null && lon != null) return { lat, lon };
+        }
+      }
+    } catch {
+      // ignore and fall back
+    }
+
+    // 2) OpenStreetMap Nominatim (no key). Best-effort; may be rate-limited.
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => []);
+      const first = Array.isArray(j) ? j[0] : null;
+      const lat = _toFloat(first?.lat);
+      const lon = _toFloat(first?.lon);
+      if (lat != null && lon != null) return { lat, lon };
+    } catch {
+      // ignore
+    }
+
+    return null;
+  };
+
+  const _openPharmacyMap = async (p) => {
+    setPharmacyMapTarget(p);
+    setPharmacyMapOpen(true);
+    setPharmacyMapState({ loading: true, error: '', lat: null, lon: null });
+
+    const { lat, lon } = _extractLatLonFromItem(p);
+    if (lat != null && lon != null) {
+      setPharmacyMapState({ loading: false, error: '', lat, lon });
+      return;
+    }
+
+    const name = String(p?.name || '').trim();
+    const address = String(p?.address || '').trim();
+    const query = address || name;
+    const geo = await _geocode(query);
+    if (geo?.lat != null && geo?.lon != null) {
+      setPharmacyMapState({ loading: false, error: '', lat: geo.lat, lon: geo.lon });
+      return;
+    }
+
+    setPharmacyMapState({
+      loading: false,
+      error: '좌표를 찾지 못했어요. 주소가 더 구체적이면 더 잘 나와요.',
+      lat: null,
+      lon: null,
+    });
+  };
+
+  const _closePharmacyMap = () => {
+    setPharmacyMapOpen(false);
+    setPharmacyMapTarget(null);
+    setPharmacyMapState({ loading: false, error: '', lat: null, lon: null });
+  };
+
+  const pharmacyMapEmbedUrl = useMemo(() => {
+    const lat = pharmacyMapState.lat;
+    const lon = pharmacyMapState.lon;
+    if (lat == null || lon == null) return '';
+    const delta = 0.01;
+    const left = lon - delta;
+    const right = lon + delta;
+    const top = lat + delta;
+    const bottom = lat - delta;
+    // bbox=left,bottom,right,top
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
+      `${left},${bottom},${right},${top}`,
+    )}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`;
+  }, [pharmacyMapState.lat, pharmacyMapState.lon]);
 
   // --- 함수 (Functions) ---
   // 텍스트 검색 처리
@@ -1233,14 +1348,24 @@ const MainPage = () => {
                           <div className="mt-1 text-sm text-slate-600 font-medium leading-relaxed">{address}</div>
                           {phone && <div className="mt-2 text-sm font-semibold text-slate-700">☎ {phone}</div>}
                         </div>
-                        <a
-                          href={mapUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="shrink-0 px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                        >
-                          지도
-                        </a>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => _openPharmacyMap(p)}
+                            className="px-4 py-2 rounded-3xl bg-slate-900 text-white font-semibold shadow-soft hover:opacity-95 transition"
+                          >
+                            지도 보기
+                          </button>
+                          <a
+                            href={mapUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            title="외부 지도(새 탭)"
+                          >
+                            외부
+                          </a>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1254,6 +1379,63 @@ const MainPage = () => {
           </div>
         </div>
       </section>
+
+      {pharmacyMapOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-3xl rounded-4xl bg-white border border-subtle apple-shadow overflow-hidden">
+            <div className="px-6 py-4 border-b border-subtle flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-black text-slate-900 truncate">
+                  {String(pharmacyMapTarget?.name || '약국').trim() || '약국'} 지도
+                </div>
+                <div className="text-xs text-slate-500 truncate">
+                  {String(pharmacyMapTarget?.address || '').trim()}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={_closePharmacyMap}
+                className="px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="p-6">
+              {pharmacyMapState.loading ? (
+                <div className="text-sm font-semibold text-slate-600">지도 불러오는 중…</div>
+              ) : pharmacyMapState.error ? (
+                <div className="text-sm font-semibold text-red-600">{pharmacyMapState.error}</div>
+              ) : pharmacyMapEmbedUrl ? (
+                <div className="space-y-3">
+                  <div className="rounded-3xl overflow-hidden border border-subtle">
+                    <iframe
+                      title="map"
+                      src={pharmacyMapEmbedUrl}
+                      className="w-full h-[360px]"
+                      loading="lazy"
+                    />
+                  </div>
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${encodeURIComponent(
+                      String(pharmacyMapState.lat),
+                    )}&mlon=${encodeURIComponent(String(pharmacyMapState.lon))}#map=18/${encodeURIComponent(
+                      String(pharmacyMapState.lat),
+                    )}/${encodeURIComponent(String(pharmacyMapState.lon))}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    OpenStreetMap에서 크게 보기
+                  </a>
+                </div>
+              ) : (
+                <div className="text-sm font-semibold text-slate-600">표시할 좌표가 없어요.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. 서비스 소개 (About 섹션) */}
       <section id="about" className="py-20 px-6">
@@ -1325,4 +1507,5 @@ const MainPage = () => {
     </div>
   );
 };
+
 export default MainPage;

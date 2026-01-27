@@ -9,7 +9,7 @@ except Exception:  # optional dependency / platform-specific
     pyttsx3 = None
 
 class PillInfoService:
-    def __init__(self, pkl_path=r"D:\Data\pill_db.pkl"):
+    def __init__(self, pkl_path="pill_db.pkl"):
         print("🎙️ 서비스 엔진을 초기화합니다...")
         self.tts_available = pyttsx3 is not None
 

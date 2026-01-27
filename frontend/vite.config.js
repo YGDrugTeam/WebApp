@@ -15,7 +15,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         // rewrite는 기존대로 유지하여 /api를 제거하고 Flask에 전달합니다.
-        //rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
       // 2. FastAPI 서버 (기존 설정 유지)
       '/ml': {

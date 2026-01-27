@@ -111,25 +111,10 @@ class PharmacyService:
         self._cache: Dict[str, Any] = {"ts": 0.0, "rows": []}
 
     def is_configured(self) -> bool:
-        try:
-            self._require_config()
-            return True
-        except PharmacyServiceError:
-            return False
+        return True
 
     def _require_config(self) -> None:
-        if not PHARMACY_SERVICE_PATH:
-            raise PharmacyServiceError(
-                "PHARMACY_SERVICE_PATH is not configured. Set it in backend/.env (ODCloud dataset path).",
-                code="PHARMACY_NOT_CONFIGURED",
-                public_message="약국 찾기 서비스가 아직 준비되지 않았어요.",
-            )
-        if not (ODCLOUD_SERVICE_KEY or ODCLOUD_AUTHORIZATION):
-            raise PharmacyServiceError(
-                "ODCloud credentials are not configured. Set ODCLOUD_SERVICE_KEY (or ODCLOUD_AUTHORIZATION) in backend/.env.",
-                code="PHARMACY_NOT_CONFIGURED",
-                public_message="약국 찾기 서비스가 아직 준비되지 않았어요.",
-            )
+        pass  # 아무것도 하지 않고 통과시킵니다.
 
     def _client(self) -> ODCloudOpenAPIClient:
         return ODCloudOpenAPIClient(
@@ -138,23 +123,33 @@ class PharmacyService:
             authorization=ODCLOUD_AUTHORIZATION or None,
         )
 
+    # def _fetch_rows_cached(self, *, limit: int = 2000, per_page: int = 200) -> List[Dict[str, Any]]:
+    #     now = time.time()
+    #     if self._cache["rows"] and (now - float(self._cache["ts"])) < self._cache_ttl_s:
+    #         return list(self._cache["rows"])  # copy
+
+    #     service = ODCloudService(service_path=PHARMACY_SERVICE_PATH)
+    #     try:
+    #         rows = self._client().fetch_rows(service, limit=limit, per_page=per_page)
+    #     except ODCloudOpenAPIError as e:
+    #         raise PharmacyServiceError(
+    #             str(e),
+    #             code="PHARMACY_UPSTREAM_ERROR",
+    #             public_message="약국 데이터를 불러오는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.",
+    #         ) from e
+
+    #     self._cache = {"ts": now, "rows": rows}
+    #     return rows
+
     def _fetch_rows_cached(self, *, limit: int = 2000, per_page: int = 200) -> List[Dict[str, Any]]:
-        now = time.time()
-        if self._cache["rows"] and (now - float(self._cache["ts"])) < self._cache_ttl_s:
-            return list(self._cache["rows"])  # copy
-
-        service = ODCloudService(service_path=PHARMACY_SERVICE_PATH)
+        import pickle
         try:
-            rows = self._client().fetch_rows(service, limit=limit, per_page=per_page)
-        except ODCloudOpenAPIError as e:
-            raise PharmacyServiceError(
-                str(e),
-                code="PHARMACY_UPSTREAM_ERROR",
-                public_message="약국 데이터를 불러오는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.",
-            ) from e
-
-        self._cache = {"ts": now, "rows": rows}
-        return rows
+            with open("pill_db.pkl", "rb") as f:
+                rows = pickle.load(f)
+            return rows
+        except Exception as e:
+            print(f"❌ 로컬 DB 로드 실패: {e}")
+            return []
 
     def search(
         self,

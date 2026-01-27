@@ -2,18 +2,117 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "backend:uvicorn",
+			"label": "Backend: Flask (5000)",
 			"type": "shell",
-			"command": ".\\.venv-gpu\\Scripts\\python.exe",
+			"command": "cmd",
 			"args": [
-				"-m",
-				"uvicorn",
-				"backend.main:app",
-				"--host",
-				"127.0.0.1",
-				"--port",
-				"8002",
-				"--reload"
+				"/c",
+				"cd /d C:\\dev\\pill-safe-ai\\backend && C:\\dev\\pill-safe-ai\\.venv\\Scripts\\python.exe app.py"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Backend: Flask (5000)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai\\backend; & C:\\dev\\pill-safe-ai\\.venv\\Scripts\\python.exe app.py"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Backend: Flask (5000)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai\\backend; & C:\\dev\\pill-safe-ai\\.venv\\Scripts\\python.exe app.py"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Backend: FastAPI (8000)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai; & C:\\dev\\pill-safe-ai\\.venv\\Scripts\\python.exe -m uvicorn backend.main:app --reload --port 8000"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Frontend: Vite Dev (5173)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai\\frontend; npm run dev -- --host --port 5173"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Frontend: Vite Dev (5173)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai\\frontend; npm run dev -- --host --port 5173"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Backend: FastAPI (8001)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai; & C:\\dev\\pill-safe-ai\\.venv\\Scripts\\python.exe -m uvicorn backend.main:app --reload --port 8001"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Frontend: Vite Dev (5173)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location -Path C:\\dev\\pill-safe-ai\\frontend; npm run dev -- --host --port 5173"
 			],
 			"isBackground": true,
 			"problemMatcher": [],

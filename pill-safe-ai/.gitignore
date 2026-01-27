@@ -18,6 +18,7 @@ Thumbs.db
 
 # Local secrets / env
 frontend/.env
+backend/.env
 .env
 
 # Generated audio artifacts
@@ -35,3 +36,9 @@ backend/rag_agent/*.pkl
 # Local debug artifacts (generated during development)
 .git-*.txt
 .temp-*.txt
+
+# Experiment artifacts / local outputs
+wandb/
+checkpoints/
+mediclens.db
+missing_codes.log

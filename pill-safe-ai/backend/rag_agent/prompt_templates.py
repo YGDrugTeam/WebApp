@@ -6,9 +6,8 @@ from typing import Any, Dict
 def rag_prompt_bundle() -> Dict[str, Any]:
     """Return strict prompt templates designed to reduce hallucinations.
 
-    These are *templates* for an external LLM. This project itself currently returns
-    deterministic answers without calling an LLM, but we provide these so the UI or
-    a future agent can reuse consistent guardrails.
+    The backend may run in deterministic mode (no LLM) or in LLM-backed mode.
+    These templates are used for the LLM-backed path and are also exposed to the UI.
     """
 
     output_schema = {
@@ -18,7 +17,7 @@ def rag_prompt_bundle() -> Dict[str, Any]:
         "questions_needed": ["string"],
         "evidence": [
             {
-                "source": "RAG|MFDS|DUR",
+                "source": "RAG|MFDS|DUR|LOCAL_DB|WEB",
                 "id": "string",
                 "field": "string",
                 "snippet": "string",
@@ -50,13 +49,17 @@ def rag_prompt_bundle() -> Dict[str, Any]:
     strict_developer = """입력에는 다음이 주어진다:
 - USER_QUESTION: 사용자의 질문
 - CONTEXT: RAG로 검색된 문서 조각들(top-k)
-- TOOLS_OUTPUT: MFDS/DUR 등 외부 API 응답 요약(있을 수도, 없을 수도)
+- TOOLS_OUTPUT: MFDS/DUR(공식), LOCAL_DB(로컬 CSV), WEB(선택) 등의 요약(있을 수도, 없을 수도)
 
 작업 지침:
 A) 먼저 질문이 '특정 약'을 가정하는지 확인한다. 브랜드명만 있으면 성분/함량이 불명확하므로 질문한다.
 B) CONTEXT/TOOLS_OUTPUT에서 직접 근거가 있는 주장만 요약한다.
 C) 근거가 없는 부분은 not_in_context에 기록하고, 질문으로 되돌린다.
 D) safety_level은 근거에 '금기/주의/중요도' 같은 명시 표현이 있을 때만 상향(avoid/caution)한다. 애매하면 unknown.
+
+[추가 규칙: 술(알코올) 경고]
+- TOOLS_OUTPUT/CONTEXT에 '음주', '술', '알코올' 관련 명시적인 금지/중대 위험(예: 간손상, 위장출혈, 호흡억제, 저혈당 쇼크 등)이 *있는 경우에만* key_points에 별도 한 줄로 경고를 넣는다.
+- 근거에 없으면 술 관련 문장은 작성하지 않는다.
 
 EVIDENCE 작성 규칙:
 - evidence[i].snippet은 실제로 CONTEXT/TOOLS_OUTPUT에 존재하는 문장/필드에서 발췌한다(조합/재작성 금지).

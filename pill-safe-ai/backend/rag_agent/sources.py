@@ -218,4 +218,31 @@ def build_default_documents() -> List[RagDocument]:
         if isinstance(payload, dict):
             docs.extend(_docs_from_drug_database(payload))
 
+    # Small built-in manual docs (fallback + smoke-test fixtures)
+    docs.extend(
+        [
+            RagDocument(
+                id="manual_001",
+                title="이부프로펜",
+                text="이부프로펜은 소염진통제로, 위장 장애를 줄이기 위해 식사 후 복용하는 것이 좋습니다.",
+                meta={"source": "manual", "kind": "info"},
+            ),
+            RagDocument(
+                id="manual_002",
+                title="복합판피린",
+                text="복합판피린은 감기약으로, 아세트아미노펜 성분을 포함하고 있어 타이레놀과 중복 복용을 피해야 합니다.",
+                meta={"source": "manual", "kind": "safety"},
+            ),
+            RagDocument(
+                id="manual_003",
+                title="복합판피린과 타이레놀",
+                text=(
+                    "복합판피린은 감기약이며 타이레놀과 같은 아세트아미노펜 성분을 포함합니다. "
+                    "따라서 타이레놀과 판피린을 같이 먹으면 중복 복용이 되므로 피해야 합니다."
+                ),
+                meta={"source": "manual", "kind": "safety"},
+            ),
+        ]
+    )
+
     return docs

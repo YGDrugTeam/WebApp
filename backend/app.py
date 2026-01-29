@@ -319,39 +319,65 @@ def dur_check():
 
 @app.route('/pharmacies', methods=['GET'])
 def get_pharmacies():
+    req_id = _new_request_id()
     try:
-        req_id = _new_request_id()
-        # 프론트엔드에서 보낸 검색어(q) 등을 가져옴
-        location_query = request.args.get('q', '강남')
-        
-        # 실제로는 여기서 카카오맵/공공 API를 호출해야 하지만, 
-        # 우선 지도가 뜨는지 확인하기 위한 데모 데이터를 반환합니다.
-        mock_pharmacies = [
-            {
-                "id": "1",
-                "place_name": f"{location_query} 근처 약국",
-                "address_name": f"서울시 {location_query}구 어느 길 123",
-                "phone": "02-1234-5678",
-                "x": "127.0276", # 경도
-                "y": "37.4979"   # 위도
-            }
-        ]
+        q = str(request.args.get('q', '') or '').strip()
+        limit = request.args.get('limit', '10')
+        sort = str(request.args.get('sort', 'relevance') or 'relevance').strip()
+
+        lat_raw = request.args.get('lat')
+        lon_raw = request.args.get('lon')
+        radius_raw = request.args.get('radius_km')
+
+        lat = float(lat_raw) if lat_raw not in (None, '') else None
+        lon = float(lon_raw) if lon_raw not in (None, '') else None
+        radius_km = float(radius_raw) if radius_raw not in (None, '') else None
+
+        items = pharmacy_service.search(
+            q=q,
+            limit=int(limit or 10),
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+            sort=sort,
+        )
+
         resp = make_response(
-            jsonify({"status": "success", "data": mock_pharmacies}),
+            jsonify({"status": "success", "data": [i.to_dict() for i in items]}),
             200,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
+    except PharmacyServiceError as e:
+        resp = make_response(
+            jsonify({"status": "fail", "code": e.code, "message": e.public_message}),
+            503,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
+    except ValueError:
+        resp = make_response(
+            jsonify({"status": "fail", "code": "PHARMACY_BAD_REQUEST", "message": "요청 파라미터 형식이 올바르지 않아요."}),
+            400,
         )
         resp.headers["X-Request-Id"] = req_id
         return resp
     except Exception as e:
         print(f"Pharmacy API Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        resp = make_response(
+            jsonify({"status": "error", "message": "약국 정보를 불러오지 못했어요."}),
+            500,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
 
 
 @app.route('/pharmacies/status', methods=['GET'])
 def pharmacies_status():
     """약국 찾기 기능 상태(프론트 초기 체크용)"""
     req_id = _new_request_id()
-    resp = make_response(jsonify({"status": "success", "available": True}), 200)
+    available = bool(pharmacy_service.is_configured())
+    resp = make_response(jsonify({"status": "success", "available": available, "configured": available}), 200)
     resp.headers["X-Request-Id"] = req_id
     return resp
 

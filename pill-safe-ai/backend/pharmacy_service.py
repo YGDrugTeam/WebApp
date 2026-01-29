@@ -1,18 +1,29 @@
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import math
-
 try:
     # When running as scripts from backend/ directory
-    from odcloud_openapi import ODCloudOpenAPIClient, ODCloudOpenAPIError, ODCloudService, normalize_text, score_match
+    from odcloud_openapi import (
+        ODCloudOpenAPIClient,
+        ODCloudOpenAPIError,
+        ODCloudService,
+        normalize_text,
+        score_match,
+    )
     from settings import ODCLOUD_API_BASE, ODCLOUD_AUTHORIZATION, ODCLOUD_SERVICE_KEY, PHARMACY_SERVICE_PATH
 except Exception:  # pragma: no cover
     # When imported as a package (e.g., from backend.pharmacy_service)
-    from .odcloud_openapi import ODCloudOpenAPIClient, ODCloudOpenAPIError, ODCloudService, normalize_text, score_match
+    from .odcloud_openapi import (
+        ODCloudOpenAPIClient,
+        ODCloudOpenAPIError,
+        ODCloudService,
+        normalize_text,
+        score_match,
+    )
     from .settings import ODCLOUD_API_BASE, ODCLOUD_AUTHORIZATION, ODCLOUD_SERVICE_KEY, PHARMACY_SERVICE_PATH
 
 
@@ -65,7 +76,6 @@ def _to_float(value: Any) -> Optional[float]:
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    # Earth radius in km
     r = 6371.0
     p1 = math.radians(lat1)
     p2 = math.radians(lat2)
@@ -77,7 +87,6 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _extract_lat_lon(row: Dict[str, Any]) -> tuple[Optional[float], Optional[float]]:
-    # Common ODCloud column variants
     lat = _to_float(
         row.get("위도")
         or row.get("LAT")
@@ -100,21 +109,24 @@ def _extract_lat_lon(row: Dict[str, Any]) -> tuple[Optional[float], Optional[flo
 
 
 class PharmacyService:
-    """Best-effort pharmacy finder backed by ODCloud dataset.
-
-    This service intentionally does NOT provide demo/sample data.
-    It requires PHARMACY_SERVICE_PATH + ODCLOUD credentials to be configured.
-    """
+    """Best-effort pharmacy finder backed by an ODCloud dataset."""
 
     def __init__(self, *, cache_ttl_s: float = 300.0) -> None:
         self._cache_ttl_s = cache_ttl_s
         self._cache: Dict[str, Any] = {"ts": 0.0, "rows": []}
 
     def is_configured(self) -> bool:
-        return True
+        creds_ok = bool((ODCLOUD_SERVICE_KEY or "").strip() or (ODCLOUD_AUTHORIZATION or "").strip())
+        return bool((PHARMACY_SERVICE_PATH or "").strip()) and creds_ok
 
     def _require_config(self) -> None:
-        pass  # 아무것도 하지 않고 통과시킵니다.
+        if self.is_configured():
+            return
+        raise PharmacyServiceError(
+            "Pharmacy service is not configured (missing PHARMACY_SERVICE_PATH and/or ODCloud credentials).",
+            code="PHARMACY_NOT_CONFIGURED",
+            public_message="현재 약국 찾기 기능을 이용할 수 없어요.",
+        )
 
     def _client(self) -> ODCloudOpenAPIClient:
         return ODCloudOpenAPIClient(
@@ -123,33 +135,23 @@ class PharmacyService:
             authorization=ODCLOUD_AUTHORIZATION or None,
         )
 
-    # def _fetch_rows_cached(self, *, limit: int = 2000, per_page: int = 200) -> List[Dict[str, Any]]:
-    #     now = time.time()
-    #     if self._cache["rows"] and (now - float(self._cache["ts"])) < self._cache_ttl_s:
-    #         return list(self._cache["rows"])  # copy
+    def _fetch_rows_cached(self, *, limit: int = 3000, per_page: int = 200) -> List[Dict[str, Any]]:
+        now = time.time()
+        if self._cache["rows"] and (now - float(self._cache["ts"])) < self._cache_ttl_s:
+            return list(self._cache["rows"])  # copy
 
-    #     service = ODCloudService(service_path=PHARMACY_SERVICE_PATH)
-    #     try:
-    #         rows = self._client().fetch_rows(service, limit=limit, per_page=per_page)
-    #     except ODCloudOpenAPIError as e:
-    #         raise PharmacyServiceError(
-    #             str(e),
-    #             code="PHARMACY_UPSTREAM_ERROR",
-    #             public_message="약국 데이터를 불러오는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.",
-    #         ) from e
-
-    #     self._cache = {"ts": now, "rows": rows}
-    #     return rows
-
-    def _fetch_rows_cached(self, *, limit: int = 2000, per_page: int = 200) -> List[Dict[str, Any]]:
-        import pickle
+        service = ODCloudService(service_path=PHARMACY_SERVICE_PATH)
         try:
-            with open("pill_db.pkl", "rb") as f:
-                rows = pickle.load(f)
-            return rows
-        except Exception as e:
-            print(f"❌ 로컬 DB 로드 실패: {e}")
-            return []
+            rows = self._client().fetch_rows(service, limit=limit, per_page=per_page)
+        except ODCloudOpenAPIError as e:
+            raise PharmacyServiceError(
+                str(e),
+                code="PHARMACY_UPSTREAM_ERROR",
+                public_message="약국 데이터를 불러오는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.",
+            ) from e
+
+        self._cache = {"ts": now, "rows": rows}
+        return rows
 
     def search(
         self,
@@ -171,6 +173,7 @@ class PharmacyService:
         sort = (sort or "relevance").strip().lower()
         if sort not in ("relevance", "distance"):
             sort = "relevance"
+
         if radius_km is not None:
             try:
                 radius_km = float(radius_km)
@@ -231,9 +234,6 @@ class PharmacyService:
 
             candidates.append((score, PharmacyItem(name=name, address=address, phone=phone, distance_km=distance_km, raw=row)))
 
-        # Sorting strategy:
-        # - relevance: score desc, distance asc (when available)
-        # - distance: distance asc (when available), score desc
         def _sort_key(pair: tuple[int, PharmacyItem]):
             s, item = pair
             dist = item.distance_km

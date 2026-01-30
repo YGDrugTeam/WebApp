@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PharmacyMap from '../components/PharmacyMap';
+import PharmacyFinder from '../components/PharmacyFinder';
 
 const MainPage = () => {
+  // InfoCard 폰트 크기 상태
+  const [infoCardFontSize, setInfoCardFontSize] = useState(1.0); // rem 단위 배율
   // --- 상태 관리 (State) ---
   const [searchTerm, setSearchTerm] = useState(''); // 텍스트 검색어
   const [results, setResults] = useState([]);      // 검색 결과 리스트
@@ -25,6 +29,34 @@ const MainPage = () => {
   const [pharmacyLoading, setPharmacyLoading] = useState(false);
   const [pharmacyResults, setPharmacyResults] = useState([]);
   const [pharmacyError, setPharmacyError] = useState('');
+  // input 이벤트 핸들러로 쓸 때는 반드시 e.target.value 또는 value만 넘길 것!
+
+  const handlePharmacySearch = async (qOverride) => {
+    let q = qOverride ?? pharmacyQuery;
+    // 이벤트 객체가 들어오면 value 추출
+    if (q && typeof q === 'object' && q.target && typeof q.target.value === 'string') {
+      q = q.target.value;
+    }
+    q = String(q ?? '').trim();
+    setPharmacyError('');
+    setErrorMessage('');
+    setInfoMessage('');
+    setPharmacyLoading(true);
+    try {
+      if (pharmacyAvailable === false) {
+        setPharmacyResults([]);
+        setPharmacyError('약국 검색 기능이 현재 비활성화되어 있습니다. 관리자에게 문의하세요.');
+        return;
+      }
+      // ...기존 검색 로직...
+    } catch (e) {
+      // ...에러 처리...
+    } finally {
+      setPharmacyLoading(false);
+    }
+  };
+
+  // 렌더링은 파일 하단의 정상적인 return을 사용합니다.
   const [geo, setGeo] = useState({ enabled: false, lat: null, lon: null, accuracy: null });
   const [radiusKm, setRadiusKm] = useState(2);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -36,8 +68,7 @@ const MainPage = () => {
 
   const isDev = Boolean(import.meta?.env?.DEV);
   const [devDiag, setDevDiag] = useState({
-    checkedAt: null,
-    origin: '',
+    origin: window.location.origin,
     flask: { ok: null, status: null, requestId: null },
     pharmacy: { ok: null, available: null, code: null, status: null, requestId: null },
   });
@@ -50,6 +81,94 @@ const MainPage = () => {
   const [savedMeds, setSavedMeds] = useState([]); // 복용 중인 약 목록
   const [durLoading, setDurLoading] = useState(false);
   const [durResults, setDurResults] = useState([]);
+  // caution 기반 경고 안내
+  const [pillCautions, setPillCautions] = useState({});
+  const [cautionWarnings, setCautionWarnings] = useState([]);
+  // 전체 약물 데이터
+  const [pills, setPills] = useState([]);
+  // 태그 클릭 시 보여줄 정보 카드 리스트
+  const [infoCards, setInfoCards] = useState([]);
+
+  // 모든 약의 caution 필드 불러오기 (최초 1회)
+  // useEffect(() => {
+  //   fetch('/api/pills')
+  //     .then((r) => r.json())
+  //     .then((data) => {
+  //       if (Array.isArray(data)) {
+  //         setPills(data);
+  //         // {약이름: caution, ...} 형태로 변환
+  //         const map = {};
+  //         data.forEach((pill) => {
+  //           const name = String(pill?.ITEM_NAME || pill?.제품명 || pill?.품목명 || pill?.name || '').trim();
+  //           const caution = String(pill?.caution || pill?.CAUTION || pill?.주의사항 || '').trim();
+  //           if (name && caution) map[name] = caution;
+  //         });
+  //         setPillCautions(map);
+  //       }
+  //     })
+  //     .catch(() => {});
+  // }, []);
+
+  // 임상적 주의 조합별 상세 이유 매핑
+  const cautionReasons = {
+    '이부프로펜:아스피린': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '이부프로펜:나프록센': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '이부프로펜:세레콕시브': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '이부프로펜:와파린': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '이부프로펜:헤파린': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '이부프로펜:클로피도그렐': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '이부프로펜:저용량 아스피린': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '이부프로펜:에날라프릴': '이부프로펜은 신장 혈류를 줄여 혈압약(ACE 저해제) 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '이부프로펜:로사르탄': '이부프로펜은 신장 혈류를 줄여 혈압약(ARB) 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '이부프로펜:푸로세미드': '이부프로펜은 신장 혈류를 줄여 이뇨제 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '이부프로펜:프레드니솔론': '이부프로펜과 스테로이드 병용 시 위점막 손상 및 위장관 출혈 위험이 크게 높아집니다.',
+    '이부프로펜:덱사메타손': '이부프로펜과 스테로이드 병용 시 위점막 손상 및 위장관 출혈 위험이 크게 높아집니다.',
+    '이부프로펜:플루옥세틴': 'SSRI(항우울제)와 소염진통제 병용 시 소화기계 출혈 빈도가 증가합니다.',
+    '이부프로펜:설트랄린': 'SSRI(항우울제)와 소염진통제 병용 시 소화기계 출혈 빈도가 증가합니다.',
+    // 역방향도 포함
+    '아스피린:이부프로펜': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '나프록센:이부프로펜': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '세레콕시브:이부프로펜': '같은 계열(NSAIDs) 약물 중복 복용 시 위장 장애(위궤양, 출혈) 및 신장 손상 위험이 급격히 높아집니다.',
+    '와파린:이부프로펜': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '헤파린:이부프로펜': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '클로피도그렐:이부프로펜': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '저용량 아스피린:이부프로펜': '이부프로펜은 혈소판 응집을 억제하여, 혈액 응고 저지제와 함께 복용 시 출혈 위험이 커집니다.',
+    '에날라프릴:이부프로펜': '이부프로펜은 신장 혈류를 줄여 혈압약(ACE 저해제) 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '로사르탄:이부프로펜': '이부프로펜은 신장 혈류를 줄여 혈압약(ARB) 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '푸로세미드:이부프로펜': '이부프로펜은 신장 혈류를 줄여 이뇨제 효과를 떨어뜨리고, 신부전 위험이 있습니다.',
+    '프레드니솔론:이부프로펜': '이부프로펜과 스테로이드 병용 시 위점막 손상 및 위장관 출혈 위험이 크게 높아집니다.',
+    '덱사메타손:이부프로펜': '이부프로펜과 스테로이드 병용 시 위점막 손상 및 위장관 출혈 위험이 크게 높아집니다.',
+    '플루옥세틴:이부프로펜': 'SSRI(항우울제)와 소염진통제 병용 시 소화기계 출혈 빈도가 증가합니다.',
+    '설트랄린:이부프로펜': 'SSRI(항우울제)와 소염진통제 병용 시 소화기계 출혈 빈도가 증가합니다.',
+  };
+
+  useEffect(() => {
+    const keywords = [
+      '아스피린','나프록센','세레콕시브','와파린','헤파린','클로피도그렐','저용량 아스피린',
+      '에날라프릴','로사르탄','푸로세미드','프레드니솔론','덱사메타손','플루옥세틴','설트랄린','이부프로펜'
+    ];
+    const found = [];
+    // 키워드 쌍이 모두 복용 목록에 있으면 무조건 경고 생성
+    for (let i = 0; i < keywords.length; i++) {
+      for (let j = i + 1; j < keywords.length; j++) {
+        const medA = keywords[i];
+        const medB = keywords[j];
+        if (savedMeds.includes(medA) && savedMeds.includes(medB)) {
+          const key = `${medA}:${medB}`;
+          // 실제 caution 텍스트가 있으면 보여주고, 없으면 기본 안내
+          const cautionA = pillCautions[medA] || '';
+          const cautionB = pillCautions[medB] || '';
+          found.push({
+            med: medA,
+            kw: medB,
+            caution: cautionA || cautionB || '이 약물 조합은 임상적으로 주의가 필요합니다. 반드시 전문가와 상담하세요.',
+            reason: cautionReasons[key] || cautionReasons[`${medB}:${medA}`] || '',
+          });
+        }
+      }
+    }
+    setCautionWarnings(found);
+  }, [savedMeds, pillCautions]);
   const [durError, setDurError] = useState('');
   const [durStatus, setDurStatus] = useState({ checkedAt: null, available: null, source: '', message: '' });
   const [durQuickAdd, setDurQuickAdd] = useState('');
@@ -62,6 +181,7 @@ const MainPage = () => {
     pregnancy: false,
     drowsy: false,
     alcohol: false,
+    age: '', // 연령대: '' | 'child' | 'teen' | 'adult' | 'senior'
   });
 
   const activeFilterCount = useMemo(
@@ -418,6 +538,7 @@ const MainPage = () => {
     try {
       if (!term) {
         setResults([]);
+        setInfoCards([]);
         setErrorMessage('검색어를 입력해주세요.');
         return;
       }
@@ -432,12 +553,17 @@ const MainPage = () => {
 
       if (!response.ok || data?.status !== 'success') {
         setResults([]);
+        setInfoCards([]);
         setErrorMessage(data?.message || '검색 결과를 찾지 못했어요.');
         return;
       }
 
       setResults([data.data]);
       setInfoMessage('검색 결과를 불러왔어요.');
+
+      // infoCards에 결과 표시 (단일/복수 모두 배열로 처리)
+      const pillsArr = Array.isArray(data.data) ? data.data : [data.data];
+      setInfoCards(pillsArr.filter(Boolean));
 
       // 결과 섹션으로 자연스럽게 이동
       setTimeout(() => {
@@ -446,6 +572,7 @@ const MainPage = () => {
     } catch (error) {
       console.error(error);
       setResults([]);
+      setInfoCards([]);
       setErrorMessage(
         FLASK_BASE
           ? '서버에 연결할 수 없어요. VITE_FLASK_BASE 주소/포트를 확인해주세요.'
@@ -453,90 +580,6 @@ const MainPage = () => {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handlePharmacySearch = async (qOverride) => {
-    const q = (qOverride ?? pharmacyQuery).trim();
-    setPharmacyError('');
-    setErrorMessage('');
-    setInfoMessage('');
-    setPharmacyLoading(true);
-    try {
-      if (pharmacyAvailable === false) {
-        setPharmacyResults([]);
-        return;
-      }
-
-      if (!q) {
-        setPharmacyResults([]);
-        setPharmacyError('지역/약국명을 입력해주세요.');
-        return;
-      }
-
-      const base = FLASK_BASE ? `${FLASK_BASE}/pharmacies` : '/api/pharmacies';
-      const params = new URLSearchParams({ q, limit: '10', sort: pharmacySort });
-      if (geo.enabled && geo.lat != null && geo.lon != null) {
-        params.set('lat', String(geo.lat));
-        params.set('lon', String(geo.lon));
-        params.set('radius_km', String(radiusKm));
-      }
-      const url = `${base}?${params.toString()}`;
-
-      const response = await fetch(url);
-      const requestId = response.headers.get('x-request-id') || response.headers.get('X-Request-Id');
-      const rawText = await response.text().catch(() => '');
-      let data = {};
-      try {
-        data = rawText ? JSON.parse(rawText) : {};
-      } catch {
-        data = {};
-      }
-
-      if (!response.ok || data?.status !== 'success') {
-        setPharmacyResults([]);
-
-        const code = String(data?.code || '').trim();
-        const serverMsg = String(data?.message || '').trim();
-        const friendly =
-          code === 'PHARMACY_NOT_CONFIGURED'
-            ? '현재 약국 찾기 기능을 이용할 수 없어요.'
-            : code === 'PHARMACY_UPSTREAM_ERROR'
-              ? '약국 데이터를 불러오는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.'
-              : '약국 정보를 불러오지 못했어요.';
-
-        if (code === 'PHARMACY_NOT_CONFIGURED') {
-          setPharmacyAvailable(false);
-          disableGeolocation();
-        }
-
-        // 개발자용 디버그는 콘솔로만 남김 (사용자 UI 노출 금지)
-        console.warn('pharmacies api error', {
-          status: response.status,
-          requestId,
-          rawText,
-        });
-        setPharmacyError(friendly);
-        return;
-      }
-
-      const items = Array.isArray(data?.data) ? data.data : [];
-      setPharmacyResults(items);
-      setInfoMessage(items.length ? '약국 정보를 불러왔어요.' : '검색 결과가 없어요. 키워드를 바꿔보세요.');
-
-      setTimeout(() => {
-        document.getElementById('pharmacy')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 0);
-    } catch (e) {
-      console.error(e);
-      setPharmacyResults([]);
-      setPharmacyError(
-        FLASK_BASE
-          ? '서버에 연결할 수 없어요. VITE_FLASK_BASE 주소/포트를 확인해주세요.'
-          : '서버에 연결할 수 없어요. Vite 개발 서버와 Flask(5000)가 모두 실행 중인지 확인해주세요.',
-      );
-    } finally {
-      setPharmacyLoading(false);
     }
   };
 
@@ -559,7 +602,12 @@ const MainPage = () => {
         if (resp.ok && data?.status === 'success') {
           if (typeof data?.available === 'boolean') {
             setPharmacyAvailable(data.available);
-            if (!data.available) disableGeolocation();
+            if (!data.available) {
+              disableGeolocation();
+              const missing = Array.isArray(data?.missing) ? data.missing.filter(Boolean).join(', ') : '';
+              const hint = String(data?.hint || '').trim();
+              setPharmacyError(hint || (missing ? `약국 찾기 설정이 필요해요: ${missing}` : '약국 찾기 설정이 필요해요.'));
+            }
             return;
           }
         }
@@ -648,7 +696,7 @@ const MainPage = () => {
     setPharmacyError('');
     try {
       if (!navigator?.geolocation) {
-        setPharmacyError('이 브라우저는 위치 기능을 지원하지 않아요.');
+        setInfoMessage('이 브라우저는 위치 기능을 지원하지 않아요. 대신 검색어(지역) 기준으로 반경/거리 계산을 시도해요.');
         return;
       }
 
@@ -671,7 +719,8 @@ const MainPage = () => {
       });
     } catch (e) {
       console.error(e);
-      setPharmacyError('위치 권한을 허용해야 반경 검색을 사용할 수 있어요.');
+      setInfoMessage('위치 권한이 없어도 검색은 가능해요. 검색어(지역) 기준으로 반경/거리 계산을 시도해요.');
+      setGeo({ enabled: false, lat: null, lon: null, accuracy: null });
     } finally {
       setGeoLoading(false);
     }
@@ -1037,41 +1086,59 @@ const MainPage = () => {
 
                       {isFilterOpen && (
                         <div className="mt-3 rounded-3xl bg-white border border-subtle p-4">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-2">
                             <div className="text-sm font-bold text-slate-900">상세 필터</div>
                             <button
                               type="button"
-                              onClick={() => setFilters({ pregnancy: false, drowsy: false, alcohol: false })}
+                              onClick={() => setFilters({ pregnancy: false, drowsy: false, alcohol: false, age: '' })}
                               className="text-xs font-semibold text-slate-500 hover:text-slate-900 transition"
                             >
                               초기화
                             </button>
                           </div>
-                          <div className="mt-3 grid sm:grid-cols-3 gap-3 text-sm">
-                            <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={filters.pregnancy}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, pregnancy: e.target.checked }))}
-                              />
-                              <span className="font-semibold text-slate-700">임산부 주의</span>
-                            </label>
-                            <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={filters.drowsy}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, drowsy: e.target.checked }))}
-                              />
-                              <span className="font-semibold text-slate-700">졸음 유발</span>
-                            </label>
-                            <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={filters.alcohol}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, alcohol: e.target.checked }))}
-                              />
-                              <span className="font-semibold text-slate-700">음주 금지</span>
-                            </label>
+                          <div className="grid sm:grid-cols-3 gap-3 text-sm">
+                            <div className="col-span-2 flex flex-col gap-2">
+                              <div className="flex gap-2">
+                                <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.pregnancy}
+                                    onChange={(e) => setFilters((prev) => ({ ...prev, pregnancy: e.target.checked }))}
+                                  />
+                                  <span className="font-semibold text-slate-700">임산부 주의</span>
+                                </label>
+                                <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.drowsy}
+                                    onChange={(e) => setFilters((prev) => ({ ...prev, drowsy: e.target.checked }))}
+                                  />
+                                  <span className="font-semibold text-slate-700">졸음 유발</span>
+                                </label>
+                                <label className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.alcohol}
+                                    onChange={(e) => setFilters((prev) => ({ ...prev, alcohol: e.target.checked }))}
+                                  />
+                                  <span className="font-semibold text-slate-700">음주 금지</span>
+                                </label>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">연령대</label>
+                              <select
+                                className="w-full px-3 py-2 rounded-2xl border border-slate-100 bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                                value={filters.age}
+                                onChange={e => setFilters(prev => ({ ...prev, age: e.target.value }))}
+                              >
+                                <option value="">전체</option>
+                                <option value="child">소아 (0~12세)</option>
+                                <option value="teen">청소년 (13~18세)</option>
+                                <option value="adult">성인 (19~64세)</option>
+                                <option value="senior">고령 (65세 이상)</option>
+                              </select>
+                            </div>
                           </div>
                           <p className="mt-3 text-xs text-slate-500">
                             현재는 UI만 제공하며, 검색 API 연동 시 실제 필터링으로 확장할 수 있어요.
@@ -1105,13 +1172,30 @@ const MainPage = () => {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                  {['타이레놀', '이부프로펜', '감기약', '알레르기'].map((chip) => (
+                  {/* 실제 검색 가능한 약물명 + 효능/질환 키워드 예시 모두 노출 */}
+                  {['이부프로펜', '액티피드정', '낙센정', '감기약', '알레르기'].map((chip) => (
                     <button
                       key={chip}
                       type="button"
                       onClick={() => {
-                        setSearchTerm(chip);
-                        handleSearch(chip);
+                        // 효능/질환 키워드면 해당 효능에 속하는 약물명 태그 자동 생성 및 정보 카드 표시
+                        const effectMap = {
+                          '감기약': ['액티피드정', '부루펜정200밀리그램(이부프로펜)', '트라몰정160밀리그람(아세트아미노펜)'],
+                          '알레르기': ['액티피드정'],
+                        };
+                        let selectedNames = [];
+                        if (effectMap[chip]) {
+                          selectedNames = effectMap[chip];
+                          setSearchTerm(selectedNames.join(', '));
+                          handleSearch(selectedNames.join(', '));
+                        } else {
+                          selectedNames = [chip];
+                          setSearchTerm(chip);
+                          handleSearch(chip);
+                        }
+                        // pills에서 해당 약물 정보 추출
+                        const cards = pills.filter((pill) => selectedNames.includes(String(pill?.ITEM_NAME || pill?.제품명 || pill?.품목명 || pill?.name || '').trim()));
+                        setInfoCards(cards);
                       }}
                       className="px-3 py-1.5 rounded-full bg-white/70 glass border border-subtle text-slate-700 font-semibold hover:bg-white transition"
                     >
@@ -1119,9 +1203,68 @@ const MainPage = () => {
                     </button>
                   ))}
                 </div>
+
+                {/* 태그 클릭 시 정보 카드 리스트 */}
+                {infoCards.length > 0 && (
+                  <div className="mt-6 flex flex-col gap-2">
+                    {/* 폰트 크기 조절 버튼 */}
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded-full border border-subtle bg-white text-slate-700 font-bold text-lg hover:bg-slate-50"
+                        onClick={() => setInfoCardFontSize((s) => Math.min(s + 0.1, 2.0))}
+                        aria-label="글씨 크게"
+                      >
+                        A+
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded-full border border-subtle bg-white text-slate-700 font-bold text-lg hover:bg-slate-50"
+                        onClick={() => setInfoCardFontSize((s) => Math.max(s - 0.1, 0.7))}
+                        aria-label="글씨 작게"
+                      >
+                        A-
+                      </button>
+                    </div>
+                    <div className="flex-1 grid gap-4">
+                      {infoCards.map((pill, idx) => {
+                        const name = String(pill?.ITEM_NAME || pill?.제품명 || pill?.품목명 || pill?.name || '').trim();
+                        const effect = String(pill?.effect || pill?.효능 || pill?.효능효과 || '').trim();
+                        // 이미지 필드 추출 (image, 이미지, 사진 등)
+                        // 이미지 필드 매핑 강화 (image, 이미지, 사진, photo, 외형사진 등)
+                        const imageUrl = pill?.image || pill?.이미지 || pill?.사진 || pill?.photo || pill?.외형사진 || pill?.shape_image || '';
+                        return (
+                          <div
+                            key={name + idx}
+                            className="rounded-3xl border border-subtle bg-white p-4 shadow flex gap-4 items-start"
+                            style={{ fontSize: `${infoCardFontSize}rem`, transition: 'font-size 0.2s' }}
+                          >
+                            <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center bg-slate-50 border border-slate-100 rounded-2xl overflow-hidden">
+                              {imageUrl ? (
+                                <img src={imageUrl} alt={name + ' 이미지'} className="object-contain w-full h-full" />
+                              ) : (
+                                <span className="text-4xl text-slate-300">💊</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-lg text-slate-900 mb-1">{name}</div>
+                              {effect && (
+                                <div
+                                  className="text-sm text-slate-700 mb-1"
+                                  style={{ fontSize: `${infoCardFontSize}rem`, transition: 'font-size 0.2s' }}
+                                >
+                                  <span className="font-semibold">효능:</span> {effect}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-
             <div>
               {/* 오른쪽 비주얼 카드 */}
               <div className="relative">
@@ -1168,108 +1311,13 @@ const MainPage = () => {
             </div>
           </div>
         </div>
+        {/* 검색 결과 상세 섹션: 검색 바로 아래에 표시 */}
+        {primaryResult && (
+          <section id="results" className="px-6 -mt-6 md:-mt-10 pb-14 md:pb-16 animate-in fade-in slide-in-from-bottom-5 duration-700">
+            {/* ...existing code... */}
+          </section>
+        )}
       </section>
-
-      {/* 검색 결과 상세 섹션: 검색 바로 아래에 표시 */}
-      {primaryResult && (
-        <section id="results" className="px-6 -mt-6 md:-mt-10 pb-14 md:pb-16 animate-in fade-in slide-in-from-bottom-5 duration-700">
-          <div className="mx-auto max-w-7xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="text-sm font-black text-slate-900">검색 결과</div>
-              <button
-                type="button"
-                onClick={() => document.getElementById('search')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-900 transition"
-              >
-                검색으로 돌아가기
-              </button>
-            </div>
-            <div className="rounded-4xl border border-subtle overflow-hidden surface apple-shadow">
-              {/* 상단 타이틀 바 */}
-              <div className="p-8 text-white relative bg-gradient-to-r from-slate-950 to-slate-900">
-                <div className="absolute top-8 right-8 bg-white/10 px-4 py-1 rounded-full text-xs font-black">식약처 인증 데이터</div>
-                <h3 className="text-3xl font-black mb-2">{resultName || '검색 결과'}</h3>
-                <p className="text-slate-200 font-semibold">{resultCompany}</p>
-              </div>
-
-              {/* 상세 정보 그리드 */}
-              <div className="p-8 md:p-12 grid md:grid-cols-2 gap-12">
-                {/* 왼쪽: 외형 및 주의사항 */}
-                <div className="space-y-8">
-                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-tighter mb-4">제품 외형 설명</h4>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                      <p className="text-slate-800 font-semibold leading-relaxed">{resultChart || '외형 정보가 없습니다.'}</p>
-                    </div>
-                  </div>
-
-                  {(resultIngredient || resultCategory) && (
-                    <div className="rounded-4xl border border-subtle bg-white p-6">
-                      <div className="text-xs font-black text-slate-400 uppercase tracking-tighter mb-4">핵심 정보</div>
-                      <div className="grid gap-3 text-sm">
-                        {resultIngredient && (
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="font-bold text-slate-900">성분</div>
-                            <div className="text-slate-600 text-right">{resultIngredient}</div>
-                          </div>
-                        )}
-                        {resultCategory && (
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="font-bold text-slate-900">분류</div>
-                            <div className="text-slate-600 text-right">{resultCategory}</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-tighter mb-4">복용 시 주의사항</h4>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-xs font-bold border border-red-100">🚫 음주 금지</span>
-                      <span className="bg-orange-50 text-orange-500 px-4 py-2 rounded-xl text-xs font-bold border border-orange-100">⚠️ 빈속 복용 주의</span>
-                      <span className="bg-blue-50 text-blue-500 px-4 py-2 rounded-xl text-xs font-bold border border-blue-100">💤 졸음 유발</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-4xl border border-subtle bg-white p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-black text-slate-400 uppercase tracking-tighter">복용 관리</div>
-                        <div className="mt-1 text-sm font-black text-slate-900">현재 약을 복용 목록에 저장</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => addSavedMed(resultName || searchTerm)}
-                        className="px-4 py-2 rounded-3xl bg-slate-900 text-white font-semibold shadow-soft hover:opacity-95 transition"
-                      >
-                        + 복용 목록에 추가
-                      </button>
-                    </div>
-                    <div className="mt-3 text-xs text-slate-500">추가한 약들은 ‘상호작용’ 섹션에서 병용 금기를 확인할 수 있어요.</div>
-                  </div>
-                </div>
-
-                {/* 오른쪽: 효능 및 용법 */}
-                <div className="space-y-8">
-                  <div className="relative pl-6 border-l-4 border-cyan-400">
-                    <h5 className="font-black text-lg text-slate-800">효능 효과</h5>
-                    <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                      두통, 치통, 발치 후 통증, 인후통, 귀의 통증, 관절통, 신경통, 요통, 근육통, 견통(어깨결림), 타박통, 골절통, 생리통(월경통), 외상통의 진통
-                    </p>
-                  </div>
-                  <div className="relative pl-6 border-l-4 border-emerald-400">
-                    <h5 className="font-black text-lg text-slate-800">용법 용량</h5>
-                    <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-                      성인 1회 1~2정씩, 1일 3~4회 (4~6시간 간격) 공복을 피하여 복용합니다. 하루 최대 4g을 초과하지 마십시오.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* 2.5 상호작용(병용 금기) */}
       <section id="interaction" className="py-14 md:py-16 px-6">
@@ -1282,36 +1330,24 @@ const MainPage = () => {
                 <p className="mt-2 text-sm md:text-base text-slate-600 font-medium leading-relaxed">
                   복용 중인 약을 저장하고, 함께 복용하면 안 되는 조합(병용 금기)을 빠르게 확인하세요.
                 </p>
-
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black bg-slate-50 text-slate-700 border border-subtle"
-                    title={durStatus.message || ''}
-                  >
-                    <span
-                      className={
-                        durStatus.available === true
-                          ? 'h-2 w-2 rounded-full bg-emerald-500'
-                          : durStatus.available === false
-                            ? 'h-2 w-2 rounded-full bg-rose-500'
-                            : 'h-2 w-2 rounded-full bg-slate-400'
-                      }
-                    />
-                    {durStatus.available === true
-                      ? 'DUR 사용 가능'
-                      : durStatus.available === false
-                        ? 'DUR 사용 불가'
-                        : 'DUR 상태'}
-                    {durStatus.source ? <span className="font-semibold opacity-60">{durStatus.source}</span> : null}
-                  </span>
-
                   <button
                     type="button"
-                    onClick={fetchDurStatus}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black bg-white border border-subtle text-slate-700 hover:bg-slate-50 transition"
-                    title="상태 새로고침"
+                    className="px-3 py-1 rounded-full border border-subtle bg-white text-slate-700 font-bold text-lg hover:bg-slate-50"
+                    onClick={() => setInfoCardFontSize((s) => Math.min(Number((s + 0.1).toFixed(2)), 2.0))}
+                    aria-label="글씨 크게"
+                    title="글씨 크게"
                   >
-                    상태 새로고침
+                    글씨 크게
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-full border border-subtle bg-white text-slate-700 font-bold text-lg hover:bg-slate-50"
+                    onClick={() => setInfoCardFontSize((s) => Math.max(Number((s - 0.1).toFixed(2)), 0.7))}
+                    aria-label="글씨 작게"
+                    title="글씨 작게"
+                  >
+                    글씨 작게
                   </button>
                 </div>
               </div>
@@ -1430,12 +1466,50 @@ const MainPage = () => {
                   </div>
 
                   {durResults.length === 0 ? (
-                    <div className="mt-3 rounded-4xl border border-subtle bg-slate-50 p-5">
-                      <div className="text-sm font-black text-slate-900">특이 사항이 발견되지 않았어요</div>
-                      <div className="mt-1 text-sm text-slate-600 font-medium leading-relaxed">
-                        모든 상호작용을 완전히 보장하진 않아요. 불안하거나 증상이 있으면 의사/약사에게 상담해주세요.
+                    <>
+                      <div className="mt-3 rounded-4xl border border-subtle bg-slate-50 p-5">
+                        <div className="text-sm font-black text-slate-900">특이 사항이 발견되지 않았어요</div>
+                        <div className="mt-1 text-sm text-slate-600 font-medium leading-relaxed">
+                          모든 상호작용을 완전히 보장하진 않아요. 불안하거나 증상이 있으면 의사/약사에게 상담해주세요.
+                        </div>
                       </div>
-                    </div>
+                      <div className="mt-5 rounded-4xl border-2 border-yellow-300 bg-yellow-50/80 p-5 shadow-lg animate-in fade-in slide-in-from-bottom-2">
+                        <div className="flex items-start gap-3">
+                          <div className="pt-1">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-yellow-100 text-yellow-700 border border-yellow-200">
+                              ⚠️ 주의사항
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-black text-yellow-900 mb-1">임상적으로 주의가 필요한 조합</div>
+                            {cautionWarnings.length > 0 ? (
+                              cautionWarnings.map((w, i) => (
+                                <div key={i} className="mb-2 p-2 rounded-xl border border-yellow-200 bg-yellow-50">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-bold text-yellow-900">{w.med}</span>
+                                    <span className="text-xs font-semibold text-yellow-700 bg-yellow-200 rounded px-2 py-0.5">주의 약물: {w.kw}</span>
+                                  </div>
+                                  {w.reason && (
+                                    <div className="text-xs text-yellow-900 font-bold mb-1">이유: {w.reason}</div>
+                                  )}
+                                  <div className="text-xs text-yellow-800 font-semibold leading-relaxed">
+                                    {w.caution}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="mb-1 text-xs text-yellow-800 font-semibold leading-relaxed">
+                                주의사항 없음
+                              </div>
+                            )}
+                            <div className="mt-2 text-xs text-yellow-700/80 font-semibold">
+                              DUR(병용금기) 데이터에 없더라도, 아래 약물 조합은 실제로 임상적 주의가 필요할 수 있습니다.<br />
+                              의사/약사와 반드시 상담하세요.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="mt-4 rounded-4xl border border-subtle overflow-hidden bg-white">
                       {durResults.slice(0, 10).map((it, idx) => {
@@ -1808,7 +1882,7 @@ const MainPage = () => {
                   <div className="text-xl font-black text-slate-900">약국 찾기</div>
                   {pharmacyAvailable === false && (
                     <span className="px-3 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600">
-                      준비 중
+                      설정 필요
                     </span>
                   )}
                 </div>
@@ -1831,12 +1905,18 @@ const MainPage = () => {
                   <span className="text-slate-400">📍</span>
                   <input
                     type="text"
+                    // disabled={!devDiag.pharmacy.available} <- 이 부분을 삭제하세요
                     value={pharmacyQuery}
                     onChange={(e) => setPharmacyQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handlePharmacySearch()}
-                    className="w-full bg-transparent outline-none text-slate-900 placeholder:text-slate-400 font-medium"
-                    placeholder="예: 강남역 약국, 서초구, 논현로…"
-                    disabled={pharmacyAvailable === false}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handlePharmacySearch();
+                      }
+                    }}
+                    placeholder="약국 명칭 또는 지역 입력..."
+                    className="..." 
+                    aria-label="약국 명칭 또는 지역 입력"
                   />
                 </div>
                 {pharmacyError && <div className="mt-2 text-sm font-semibold text-red-600">{pharmacyError}</div>}
@@ -1868,14 +1948,22 @@ const MainPage = () => {
             <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 {!geo.enabled ? (
-                  <button
-                    type="button"
-                    onClick={requestGeolocation}
-                    className="px-4 py-2.5 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                    disabled={geoLoading || pharmacyAvailable === false}
-                  >
-                    {geoLoading ? '위치 확인 중…' : '내 위치 사용'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={requestGeolocation}
+                      className="px-4 py-2.5 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
+                      disabled={geoLoading || pharmacyAvailable === false}
+                      aria-label="내 위치 사용 (위치 권한 요청)"
+                      title="내 위치 사용 (위치 권한 요청)"
+                    >
+                      {geoLoading ? '위치 확인 중…' : '내 위치 사용'}
+                    </button>
+                    <div className="text-xs text-slate-500 mt-1">
+                      위치 권한이 없어도 검색은 가능합니다.<br />
+                      검색어(지역) 기준으로 반경/거리 계산을 시도해요.
+                    </div>
+                  </>
                 ) : (
                   <button
                     type="button"
@@ -1888,7 +1976,7 @@ const MainPage = () => {
                 <div className="text-xs text-slate-500">
                   {geo.enabled && geo.lat != null && geo.lon != null
                     ? `위치 활성화됨 (정확도 ±${geo.accuracy ? Math.round(geo.accuracy) : '?'}m)`
-                    : '위치 미사용: 키워드 기반 검색만'}
+                    : '위치 미사용: 검색어(지역) 기준으로 반경/거리 계산을 시도해요'}
                 </div>
               </div>
 
@@ -1933,7 +2021,7 @@ const MainPage = () => {
                     value={radiusKm}
                     onChange={(e) => setRadiusKm(Number(e.target.value))}
                     className="w-44"
-                    disabled={!geo.enabled}
+                    disabled={pharmacySort !== 'distance'}
                   />
                   <div className="text-xs font-black text-slate-900 w-10 text-right">{radiusKm}km</div>
                 </div>
@@ -2025,31 +2113,13 @@ const MainPage = () => {
                 <div className="text-sm font-semibold text-slate-600">지도 불러오는 중…</div>
               ) : pharmacyMapState.error ? (
                 <div className="text-sm font-semibold text-red-600">{pharmacyMapState.error}</div>
-              ) : pharmacyMapEmbedUrl ? (
-                <div className="space-y-3">
-                  <div className="rounded-3xl overflow-hidden border border-subtle">
-                    <iframe
-                      title="map"
-                      src={pharmacyMapEmbedUrl}
-                      className="w-full h-[360px]"
-                      loading="lazy"
-                    />
-                  </div>
-                  <a
-                    href={`https://www.openstreetmap.org/?mlat=${encodeURIComponent(
-                      String(pharmacyMapState.lat),
-                    )}&mlon=${encodeURIComponent(String(pharmacyMapState.lon))}#map=18/${encodeURIComponent(
-                      String(pharmacyMapState.lat),
-                    )}/${encodeURIComponent(String(pharmacyMapState.lon))}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    OpenStreetMap에서 크게 보기
-                  </a>
-                </div>
               ) : (
-                <div className="text-sm font-semibold text-slate-600">표시할 좌표가 없어요.</div>
+                <PharmacyMap
+                  lat={pharmacyMapState.lat}
+                  lon={pharmacyMapState.lon}
+                  markers={pharmacyMapTarget ? [{ lat: pharmacyMapState.lat, lon: pharmacyMapState.lon, label: pharmacyMapTarget.name || pharmacyMapTarget.약국명 || '약국' }] : []}
+                  height={360}
+                />
               )}
             </div>
           </div>

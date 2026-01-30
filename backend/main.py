@@ -12,11 +12,17 @@ try:
 except Exception:  # pragma: no cover
     from .dur_service import DurService, DurServiceError
 
-# Azure SDKs
-import azure.cognitiveservices.speech as speechsdk
-from azure.cognitiveservices.vision.computervision import ComputerVisionClient
-from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
-from msrest.authentication import CognitiveServicesCredentials
+# Azure SDKs (optional: server should run without them for non-Azure features like DUR)
+try:  # pragma: no cover
+    import azure.cognitiveservices.speech as speechsdk
+    from azure.cognitiveservices.vision.computervision import ComputerVisionClient
+    from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
+    from msrest.authentication import CognitiveServicesCredentials
+except Exception:  # pragma: no cover
+    speechsdk = None
+    ComputerVisionClient = None
+    OperationStatusCodes = None
+    CognitiveServicesCredentials = None
 
 app = FastAPI(title="MedicLens Backend")
 
@@ -29,14 +35,24 @@ app.add_middleware(
 )
 
 # --- [환경 변수 및 설정] ---
-from settings import (
-    AZURE_SPEECH_KEY,
-    AZURE_SPEECH_ENDPOINT,
-    AZURE_SPEECH_REGION,
-    AZURE_VISION_ENDPOINT,
-    AZURE_VISION_KEY,
-    DB_PATH,
-)
+try:
+    from settings import (
+        AZURE_SPEECH_KEY,
+        AZURE_SPEECH_ENDPOINT,
+        AZURE_SPEECH_REGION,
+        AZURE_VISION_ENDPOINT,
+        AZURE_VISION_KEY,
+        DB_PATH,
+    )
+except Exception:  # pragma: no cover
+    from .settings import (
+        AZURE_SPEECH_KEY,
+        AZURE_SPEECH_ENDPOINT,
+        AZURE_SPEECH_REGION,
+        AZURE_VISION_ENDPOINT,
+        AZURE_VISION_KEY,
+        DB_PATH,
+    )
 
 # 완벽한 남/여 목소리 설정
 VOICE_PRESETS = {
@@ -125,6 +141,11 @@ async def save_profile(profile: UserProfile):
 async def analyze_ocr(user_id: str, file: UploadFile = File(...)):
     """Azure Vision API를 이용한 약 봉투/처방전 텍스트 추출"""
     try:
+        if not (ComputerVisionClient and CognitiveServicesCredentials):
+            raise HTTPException(
+                status_code=503,
+                detail="Azure Vision SDK is not installed. Install azure-cognitiveservices-vision-computervision and msrest.",
+            )
         if not AZURE_VISION_KEY or not AZURE_VISION_ENDPOINT:
             raise HTTPException(
                 status_code=500,
@@ -164,6 +185,12 @@ async def dur_status():
     }
 
 
+# Frontend default paths (when VITE_FASTAPI_BASE is empty) use the /ml prefix.
+@app.get("/ml/dur/status")
+async def dur_status_ml():
+    return await dur_status()
+
+
 @app.post("/dur/check")
 async def dur_check(req: DurCheckRequest):
     svc = DurService()
@@ -179,6 +206,11 @@ async def dur_check(req: DurCheckRequest):
         raise HTTPException(status_code=503, detail={"code": e.code, "message": e.public_message})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ml/dur/check")
+async def dur_check_ml(req: DurCheckRequest):
+    return await dur_check(req)
     
 @app.post("/tts")
 async def text_to_speech(user_id: str, text: str):
@@ -186,6 +218,12 @@ async def text_to_speech(user_id: str, text: str):
     text = (text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
+
+    if not speechsdk:
+        raise HTTPException(
+            status_code=503,
+            detail="Azure Speech SDK is not installed. Install azure-cognitiveservices-speech.",
+        )
 
     profile = await get_db_profile(user_id)
     gender = profile.get("gender", "female") if profile else "female"    

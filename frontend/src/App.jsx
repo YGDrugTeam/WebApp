@@ -1,7 +1,8 @@
 import React from 'react';
-import MainPage from './pages/MainPage'; // MainPage 컴포넌트를 가져옵니다.
-import PharmacyFinder from './components/PharmacyFinder';
+import MainPage from "./pages/MainPage.jsx"; // .jsx를 명시적으로 붙여봄
 
+// 에러 발생 원인: 아래 const App 선언이 두 번 되어 있었을 것입니다.
+// 하나로 통합하여 해결합니다.
 function App() {
   return (
     <div className="App">

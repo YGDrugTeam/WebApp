@@ -58,6 +58,7 @@ platformdirs==4.5.1
 propcache==0.4.1
 protobuf==6.33.4
 pyclipper==1.4.0
+pyproj==3.6.1
 pydantic==2.12.5
 pydantic_core==2.41.5
 python-bidi==0.6.7

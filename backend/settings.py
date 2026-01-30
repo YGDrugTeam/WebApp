@@ -42,6 +42,11 @@ ODCLOUD_AUTHORIZATION: str = _env_str("ODCLOUD_AUTHORIZATION")
 # Example: /{api_id}/v1/uddi:{uuid}
 PHARMACY_SERVICE_PATH: str = _env_str("PHARMACY_SERVICE_PATH")
 
+# Optional local pharmacy dataset (CSV). If set and the file exists, the Flask
+# pharmacy endpoints will use it instead of ODCloud.
+# Example: backend/data/pharmacies_seoul_utf8.csv
+PHARMACY_LOCAL_CSV: str = _env_str("PHARMACY_LOCAL_CSV")
+
 # DUR dataset (api.odcloud.kr) for 병용금기
 # Example: /15089525/v1/uddi:3f2efdac-942b-494e-919f-8bdc583f65ea
 DUR_SERVICE_PATH: str = _env_str("DUR_SERVICE_PATH")

@@ -20,7 +20,7 @@ export default defineConfig({
       },
       // 2. FastAPI 서버 (기존 설정 유지)
       '/ml': {
-        target: 'http://localhost:8001',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ml/, ''),
       },

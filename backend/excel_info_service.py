@@ -5,7 +5,7 @@ def search_pill_from_excel(pill_name):
     """
     엑셀 파일들을 순회하며 약품 상세 정보를 검색합니다.
     """
-    base_path = "D:\\다운로드\\의약품등제품정보목록.xlsx"
+    base_path = "D:\\Data\\의약품등제품정보목록.xlsx"
     result_info = None
     
     # 10개의 엑셀 파일(Sheet0.xlsx ~ Sheet9.xlsx)이 있다고 가정합니다.

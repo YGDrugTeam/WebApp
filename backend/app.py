@@ -35,6 +35,91 @@ try:  # pragma: no cover
 except Exception:  # pragma: no cover
     easyocr = None
 
+from pharmacy_service import PharmacyService, PharmacyServiceError
+try:
+    from dur_service import DurService, DurServiceError
+except Exception:  # pragma: no cover
+    from .dur_service import DurService, DurServiceError
+
+app = Flask(__name__)
+pharmacy_service = PharmacyService()
+
+# 서비스 초기화
+info_service = PillInfoService()
+# 캐시 강제 초기화 엔드포인트 (관리용)
+pharmacy_service = PharmacyService()
+
+# Azure 설정 (환경 변수에서 가져옴)
+endpoint = os.getenv("AZURE_VISION_ENDPOINT")
+key = os.getenv("AZURE_VISION_KEY")
+
+# 클라이언트 초기화 (optional)
+vision_client = None
+if ImageAnalysisClient and AzureKeyCredential and endpoint and key:
+    try:
+        vision_client = ImageAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+    except Exception as e:
+        print(f"Azure Vision Client 초기화 실패: {e}")
+
+# --- 전체 약품 정보 요약 API ---
+@app.route('/api/pills', methods=['GET'])
+def get_all_pills():
+    """모든 약품의 주요 정보를 리스트로 반환 (프론트엔드용)"""
+    try:
+        pills = []
+        for pill_id, info in info_service.pill_data_json.items():
+            if not isinstance(info, dict):
+                continue
+            pills.append({
+                "id": pill_id,
+                "name": info.get("name", ""),
+                "manufacturer": info.get("manufacturer", ""),
+                "effect": info.get("effect", ""),
+                "usage": info.get("usage", ""),
+                "caution": info.get("caution", ""),
+                "storage": info.get("storage", "")
+            })
+        return jsonify({"status": "success", "data": pills})
+    except Exception as e:
+        print(f"🔥 /api/pills 에러: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+import os
+import io
+
+from flask import Flask, jsonify, make_response, request
+from flask_cors import CORS
+
+from info_service import PillInfoService
+from pharmacy_service import PharmacyService, PharmacyServiceError
+
+# Optional ML deps (allow server to start even if not installed)
+try:  # pragma: no cover
+    import torch
+    import torchvision.transforms as transforms
+    from PIL import Image
+except Exception:  # pragma: no cover
+    torch = None
+    transforms = None
+    Image = None
+
+try:  # pragma: no cover
+    from azure.ai.vision.imageanalysis import ImageAnalysisClient
+    from azure.core.credentials import AzureKeyCredential
+except Exception:  # pragma: no cover
+    ImageAnalysisClient = None
+    AzureKeyCredential = None
+
+# Optional OCR fallback deps
+try:  # pragma: no cover
+    import numpy as np
+except Exception:  # pragma: no cover
+    np = None
+
+try:  # pragma: no cover
+    import easyocr
+except Exception:  # pragma: no cover
+    easyocr = None
+
 try:
     from dur_service import DurService, DurServiceError
 except Exception:  # pragma: no cover
@@ -377,7 +462,46 @@ def pharmacies_status():
     """약국 찾기 기능 상태(프론트 초기 체크용)"""
     req_id = _new_request_id()
     available = bool(pharmacy_service.is_configured())
-    resp = make_response(jsonify({"status": "success", "available": available, "configured": available}), 200)
+
+    missing = []
+    try:
+        try:
+            from settings import PHARMACY_LOCAL_CSV, PHARMACY_SERVICE_PATH, ODCLOUD_SERVICE_KEY, ODCLOUD_AUTHORIZATION
+        except Exception:  # pragma: no cover
+            from .settings import PHARMACY_LOCAL_CSV, PHARMACY_SERVICE_PATH, ODCLOUD_SERVICE_KEY, ODCLOUD_AUTHORIZATION
+
+        local_csv = str(PHARMACY_LOCAL_CSV or '').strip()
+
+        # If a local CSV is configured, ODCloud config is optional.
+        if not local_csv:
+            if not str(PHARMACY_SERVICE_PATH or '').strip():
+                missing.append('PHARMACY_LOCAL_CSV(or PHARMACY_SERVICE_PATH)')
+            if not (str(ODCLOUD_SERVICE_KEY or '').strip() or str(ODCLOUD_AUTHORIZATION or '').strip()):
+                missing.append('ODCLOUD_SERVICE_KEY(or ODCLOUD_AUTHORIZATION)')
+    except Exception:
+        # Best-effort only; status should still return.
+        missing = []
+
+    hint = ''
+    if not available:
+        hint = (
+            '약국 찾기 설정이 필요해요. 기본 제공 CSV(backend/data/pharmacies_seoul_utf8.csv)가 없으면 '
+            'backend/.env에 PHARMACY_LOCAL_CSV(로컬 CSV 경로) 또는 PHARMACY_SERVICE_PATH(ODCloud 데이터셋 경로)와 '
+            'ODCLOUD_SERVICE_KEY(또는 ODCLOUD_AUTHORIZATION)를 설정해주세요.'
+        )
+
+    resp = make_response(
+        jsonify(
+            {
+                "status": "success",
+                "available": available,
+                "configured": available,
+                "missing": missing,
+                "hint": hint,
+            }
+        ),
+        200,
+    )
     resp.headers["X-Request-Id"] = req_id
     return resp
 

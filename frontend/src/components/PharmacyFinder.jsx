@@ -9,19 +9,27 @@ const PharmacyFinder = () => {
   const [map, setMap] = useState(null);
   const [searchMethod, setSearchMethod] = useState('kakao'); // 'kakao', 'public', 'hybrid'
 
+
   useEffect(() => {
     // 사용자 위치 가져오기
+    if (!navigator.geolocation) {
+      console.error('Geolocation API를 지원하지 않습니다.');
+      alert('이 브라우저는 위치 기능을 지원하지 않습니다.');
+      setUserLocation({ lat: 37.5665, lng: 126.9780 });
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        console.log('[위치] 성공:', position);
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude
         });
       },
       (error) => {
-        console.error('위치 정보 실패:', error);
+        console.error('[위치] 실패:', error);
         alert('위치 정보를 가져올 수 없습니다. 기본 위치(서울)로 검색합니다.');
-        setUserLocation({ lat: 37.5665, lng: 126.9780 }); // 서울 시청
+        setUserLocation({ lat: 37.5665, lng: 126.9780 });
       }
     );
 
@@ -29,18 +37,65 @@ const PharmacyFinder = () => {
     loadKakaoMapScript();
   }, []);
 
-  const loadKakaoMapScript = () => {
-    const script = document.createElement('script');
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_API_KEY&libraries=services&autoload=false`;
-    script.async = true;
-    document.head.appendChild(script);
-
-    script.onload = () => {
-      window.kakao.maps.load(() => {
-        console.log('카카오맵 로드 완료');
-      });
+  // PharmacyFinder.jsx 내 개선 로직
+  const initMap = () => {
+    if (!userLocation) {
+      console.warn('[지도] userLocation이 아직 없습니다.');
+      return;
+    }
+    if (!window.kakao || !window.kakao.maps) {
+      console.error('[지도] window.kakao/maps가 없습니다.');
+      return;
+    }
+    const container = document.getElementById('map');
+    if (!container) {
+      console.error('[지도] #map 컨테이너가 없습니다.');
+      return;
+    }
+    const options = {
+      center: new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng),
+      level: 3
     };
+    const newMap = new window.kakao.maps.Map(container, options);
+    // 내 위치 마커 표시
+    const marker = new window.kakao.maps.Marker({
+      position: new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng),
+      map: newMap
+    });
+    setMap(newMap);
+    console.log('[지도] 지도 생성 완료:', newMap);
   };
+
+const loadKakaoMapScript = () => {
+  if (window.kakao && window.kakao.maps) {
+    console.log('[카카오맵] 이미 window.kakao.maps가 있음');
+    return;
+  }
+  const key = (import.meta?.env?.VITE_KAKAO_MAP_KEY || '').replace(/['"`]/g, '').trim();
+  if (!key) {
+    alert('카카오맵 API 키(VITE_KAKAO_MAP_KEY)가 설정되어 있지 않습니다. .env 파일을 확인하세요.');
+    return;
+  }
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false`;
+  script.onerror = () => {
+    console.error('[카카오맵] 스크립트 로드 실패:', script.src);
+    alert('카카오맵 스크립트 로드에 실패했습니다. API 키와 네트워크를 확인하세요.');
+  };
+  document.head.appendChild(script);
+  script.onload = () => {
+    if (!window.kakao || !window.kakao.maps) {
+      console.error('[카카오맵] window.kakao/maps가 없음 (onload)');
+      alert('카카오맵 로드에 실패했습니다.');
+      return;
+    }
+    window.kakao.maps.load(() => {
+      console.log('[카카오맵] window.kakao.maps.load 완료');
+      initMap();
+    });
+  };
+};
 
   // 1. 카카오맵 API로 검색
   const searchWithKakao = () => {
@@ -111,6 +166,51 @@ const PharmacyFinder = () => {
     } catch (error) {
       console.error('공공데이터 검색 실패:', error);
       return [];
+    }
+  };
+
+  // Flask 백엔드에서 약국 리스트 가져오기
+  const searchWithFlask = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        lat: userLocation?.lat,
+        lon: userLocation?.lng,
+        radius_km: 2,
+        limit: 20,
+        q: '', // 검색어를 넣을 수 있음
+      });
+      const response = await fetch(`http://localhost:5000/pharmacies?${params}`);
+      const data = await response.json();
+      if (data.status === 'success') {
+        setPharmacies(
+          data.data.map(item => ({
+            source: 'flask',
+            name: item.name,
+            address: item.address,
+            phone: item.phone,
+            lat: item.lat,
+            lng: item.lon,
+            distance: item.distance_km ? item.distance_km * 1000 : null,
+          }))
+        );
+        displayMap(
+          data.data.map(item => ({
+            name: item.name,
+            address: item.address,
+            phone: item.phone,
+            lat: item.lat,
+            lng: item.lon,
+          }))
+        );
+      } else {
+        setPharmacies([]);
+      }
+    } catch (e) {
+      setPharmacies([]);
+      alert('Flask 백엔드에서 약국 정보를 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -232,6 +332,7 @@ const PharmacyFinder = () => {
         <p>현재 위치 기준 2km 이내 약국을 검색합니다</p>
       </div>
 
+
       <div className="search-controls">
         <button 
           onClick={searchHybrid} 
@@ -240,7 +341,14 @@ const PharmacyFinder = () => {
         >
           {loading ? '🔍 검색 중...' : '🎯 하이브리드 검색'}
         </button>
-        
+        <button
+          onClick={searchWithFlask}
+          disabled={!userLocation || loading}
+          className="search-btn"
+          style={{ marginLeft: '8px', background: '#2d6cdf', color: '#fff' }}
+        >
+          {loading ? '🔄 불러오는 중...' : '🌐 Flask 약국 검색'}
+        </button>
         <div className="search-info">
           {userLocation ? (
             <span>✅ 위치: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}</span>

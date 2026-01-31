@@ -1,0 +1,66 @@
+/* PharmacySearch.css */
+.v10-root {
+  background-color: #f7f3f0; /* 우아한 샌드 베이지 배경 */
+  min-height: 100vh;
+  font-family: 'Pretendard', sans-serif;
+  color: #3d405b;
+}
+
+.v10-container {
+  max-width: 3000px;
+  margin: 0 auto;
+  padding: 0 120px;
+}
+
+.v10-header {
+  background: linear-gradient(to bottom, #d8e2dc 0%, #f7f3f0 100%); /* 뮤트 파스텔 그린 */
+  padding: 80px 0;
+  text-align: center;
+}
+
+.v10-title-area h1 { font-size: 48px; font-weight: 800; color: #3d405b; margin-top: 10px; }
+.v10-title-area h1 span { color: #81b29a; }
+.v10-sub { text-transform: uppercase; letter-spacing: 3px; font-size: 13px; color: #e07a5f; font-weight: 700; }
+
+.v10-search-box {
+  margin-top: -60px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border-radius: 30px;
+  padding: 35px 50px;
+  box-shadow: 0 25px 50px rgba(61, 64, 91, 0.08);
+}
+
+.v10-input-line { display: flex; gap: 15px; margin-bottom: 25px; }
+.v10-search-field {
+  flex: 1; background: white; border: 1px solid #d8e2dc;
+  border-radius: 15px; padding: 0 25px;
+}
+.v10-search-field input { border: none; width: 100%; padding: 18px 0; font-size: 19px; outline: none; background: transparent; }
+
+.v10-main-btn {
+  background: #3d405b; color: #f4f1de; border: none; padding: 0 45px;
+  border-radius: 15px; font-weight: 700; cursor: pointer; transition: 0.3s;
+}
+
+.v10-filter-bar { display: flex; align-items: center; gap: 40px; border-top: 1px solid #eee; padding-top: 25px; }
+.v10-sort-tabs { position: relative; display: flex; background: #f2cc8f22; padding: 5px; border-radius: 12px; width: 220px; }
+.v10-sort-tabs button { flex: 1; border: none; background: transparent; padding: 10px 0; font-weight: 700; z-index: 5; cursor: pointer; color: #8d99ae; }
+.v10-sort-tabs button.active { color: #e07a5f; }
+.v10-indicator { position: absolute; top: 5px; left: 5px; width: calc(50% - 5px); height: calc(100% - 10px); background: white; border-radius: 10px; transition: 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+.v10-indicator.distance { transform: translateX(100%); }
+
+.v10-geo-toggle {
+  background: white; border: 1px solid #d8e2dc; border-radius: 12px; padding: 10px 20px;
+  font-weight: 700; display: flex; align-items: center; gap: 10px; cursor: pointer; color: #3d405b;
+}
+.v10-geo-toggle.active { background: #81b29a; color: white; border-color: #81b29a; }
+
+/* 리스트 섹션 (PharmacyList.css) */
+.v10-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 35px; padding: 50px 0; }
+.v10-card {
+  background: white; border-radius: 25px; padding: 35px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.02); transition: 0.3s;
+  display: flex; flex-direction: column; border: 1px solid #f0ede9;
+}
+.v10-card:hover { transform: translateY(-10px); box-shadow: 0 20px 40px rgba(61, 64, 91, 0.1); }

@@ -136,14 +136,12 @@ class ODCloudOpenAPIClient:
 def normalize_text(value: Any) -> str:
     import re
 
-    return (
-        str(value or "")
-        .lower()
-        .replace("·", " ")
-        .replace("/", " ")
-        .replace("-", " ")
-        .replace("_", " ")
-    ).strip() and re.sub(r"\s+", " ", re.sub(r"\(.*?\)", " ", re.sub(r"[^0-9a-zA-Z가-힣\s.+-]", " ", str(value or "").lower()))).strip()
+    s = str(value or "").lower()
+    s = s.replace("·", " ").replace("/", " ").replace("-", " ").replace("_", " ")
+    s = re.sub(r"\(.*?\)", " ", s)
+    s = re.sub(r"[^0-9a-zA-Z가-힣\s.+-]", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
 
 
 def score_match(query: str, target: str) -> int:

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PharmacyMap from '../components/PharmacyMap';
 import PharmacyFinder from '../components/PharmacyFinder';
+import PharmacySearch from '../components/PharmacySearch';
 
 const MainPage = () => {
   // InfoCard 폰트 크기 상태
@@ -48,9 +49,39 @@ const MainPage = () => {
         setPharmacyError('약국 검색 기능이 현재 비활성화되어 있습니다. 관리자에게 문의하세요.');
         return;
       }
-      // ...기존 검색 로직...
+      // 실제 약국 검색 API 호출
+      const payload = {
+        q,
+        sort: pharmacySort,
+        limit: 10,
+      };
+      if (geo.enabled) {
+        payload.lat = geo.lat;
+        payload.lon = geo.lon;
+        payload.radius_km = radiusKm;
+      }
+      const resp = await fetch('/api/pharmacy/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const rawText = await resp.text().catch(() => '');
+      let data = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        data = {};
+      }
+      if (!resp.ok || !Array.isArray(data)) {
+        setPharmacyResults([]);
+        setPharmacyError(data?.message || '검색 결과를 찾지 못했어요.');
+        return;
+      }
+      setPharmacyResults(data);
+      setInfoMessage(data.length ? '약국 검색 결과를 불러왔어요.' : '검색 결과가 없습니다.');
     } catch (e) {
-      // ...에러 처리...
+      setPharmacyResults([]);
+      setPharmacyError('서버에 연결할 수 없어요. Vite 개발 서버와 Flask(5000)가 모두 실행 중인지 확인해주세요.');
     } finally {
       setPharmacyLoading(false);
     }
@@ -1633,7 +1664,11 @@ const MainPage = () => {
         </div>
       </section>
 
-      {/* 3. 이미지 식별 섹션 (Step 2 적용) */}
+
+      {/* ...existing code... */}
+
+
+      {/* 4. 이미지 식별 섹션 (Step 2 적용) */}
       <section id="image" className="py-14 md:py-16 px-6">
         <div className="mx-auto max-w-7xl">
           <div>
@@ -1871,213 +1906,23 @@ const MainPage = () => {
         </div>
       )}
 
-      {/* 3.5 약국 찾기 */}
-      <section id="pharmacy" className="py-14 md:py-16 px-6">
-        <div className="mx-auto max-w-7xl">
-          <div className="rounded-4xl p-8 md:p-12 border border-subtle surface apple-shadow">
-            <div className="mb-8 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs font-black text-slate-400 uppercase tracking-tighter">편의 기능</div>
-                <div className="mt-1 flex items-center gap-3">
-                  <div className="text-xl font-black text-slate-900">약국 찾기</div>
-                  {pharmacyAvailable === false && (
-                    <span className="px-3 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600">
-                      설정 필요
-                    </span>
-                  )}
-                </div>
-                <p className="mt-2 text-sm text-slate-600 font-medium">
-                  지역/지하철역/도로명/약국명으로 검색하세요. (실데이터만 제공)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => document.getElementById('search')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="hidden sm:inline-flex px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                검색으로
-              </button>
-            </div>
 
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 px-3 md:px-4 py-3 rounded-3xl bg-white border border-subtle">
-                  <span className="text-slate-400">📍</span>
-                  <input
-                    type="text"
-                    // disabled={!devDiag.pharmacy.available} <- 이 부분을 삭제하세요
-                    value={pharmacyQuery}
-                    onChange={(e) => setPharmacyQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handlePharmacySearch();
-                      }
-                    }}
-                    placeholder="약국 명칭 또는 지역 입력..."
-                    className="..." 
-                    aria-label="약국 명칭 또는 지역 입력"
-                  />
-                </div>
-                {pharmacyError && <div className="mt-2 text-sm font-semibold text-red-600">{pharmacyError}</div>}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handlePharmacySearch}
-                  className="px-6 py-3 rounded-3xl bg-slate-900 text-white font-semibold shadow-soft hover:opacity-95 transition"
-                  disabled={pharmacyAvailable === false}
-                >
-                  {pharmacyLoading ? '검색 중…' : '검색'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPharmacyQuery('');
-                    setPharmacyResults([]);
-                    setPharmacyError('');
-                    disableGeolocation();
-                  }}
-                  className="px-6 py-3 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  초기화
-                </button>
-              </div>
-            </div>
+      {/* ...existing code... */}
 
-            <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {!geo.enabled ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={requestGeolocation}
-                      className="px-4 py-2.5 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                      disabled={geoLoading || pharmacyAvailable === false}
-                      aria-label="내 위치 사용 (위치 권한 요청)"
-                      title="내 위치 사용 (위치 권한 요청)"
-                    >
-                      {geoLoading ? '위치 확인 중…' : '내 위치 사용'}
-                    </button>
-                    <div className="text-xs text-slate-500 mt-1">
-                      위치 권한이 없어도 검색은 가능합니다.<br />
-                      검색어(지역) 기준으로 반경/거리 계산을 시도해요.
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={disableGeolocation}
-                    className="px-4 py-2.5 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    위치 해제
-                  </button>
-                )}
-                <div className="text-xs text-slate-500">
-                  {geo.enabled && geo.lat != null && geo.lon != null
-                    ? `위치 활성화됨 (정확도 ±${geo.accuracy ? Math.round(geo.accuracy) : '?'}m)`
-                    : '위치 미사용: 검색어(지역) 기준으로 반경/거리 계산을 시도해요'}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:ml-auto">
-                <div className="inline-flex rounded-3xl border border-subtle bg-white overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setPharmacySort('relevance')}
-                    className={
-                      pharmacySort === 'relevance'
-                        ? 'px-4 py-2.5 text-xs font-black text-white bg-slate-900'
-                        : 'px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50'
-                    }
-                    aria-pressed={pharmacySort === 'relevance'}
-                    title="키워드(텍스트) 유사도 우선"
-                    disabled={pharmacyAvailable === false}
-                  >
-                    키워드 우선
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPharmacySort('distance')}
-                    className={
-                      pharmacySort === 'distance'
-                        ? 'px-4 py-2.5 text-xs font-black text-white bg-slate-900'
-                        : 'px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50'
-                    }
-                    aria-pressed={pharmacySort === 'distance'}
-                    title="거리 우선(위치가 있을 때만 효과)"
-                    disabled={pharmacyAvailable === false}
-                  >
-                    거리 우선
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-xs font-semibold text-slate-600">반경</div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={radiusKm}
-                    onChange={(e) => setRadiusKm(Number(e.target.value))}
-                    className="w-44"
-                    disabled={pharmacySort !== 'distance'}
-                  />
-                  <div className="text-xs font-black text-slate-900 w-10 text-right">{radiusKm}km</div>
-                </div>
-              </div>
-            </div>
-
-            {pharmacyResults.length > 0 && (
-              <div className="mt-6 grid md:grid-cols-2 gap-4">
-                {pharmacyResults.slice(0, 10).map((p, idx) => {
-                  const name = String(p?.name ?? p?.place_name ?? p?.placeName ?? '').trim();
-                  const address = String(p?.address ?? p?.address_name ?? p?.addressName ?? '').trim();
-                  const phone = String(p?.phone ?? p?.tel ?? p?.phone_number ?? '').trim();
-                  const distanceKm = typeof p?.distance_km === 'number' ? p.distance_km : null;
-                  const mapQ = encodeURIComponent(address || name);
-                  const mapUrl = `https://map.naver.com/v5/search/${mapQ}`;
-                  return (
-                    <div key={`${idx}-${name}-${address}`} className="rounded-4xl border border-subtle bg-white p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-black text-slate-900">{name || '약국'}</div>
-                            {distanceKm != null && (
-                              <div className="text-xs font-bold text-slate-500">· {distanceKm.toFixed(2)}km</div>
-                            )}
-                          </div>
-                          <div className="mt-1 text-sm text-slate-600 font-medium leading-relaxed">{address}</div>
-                          {phone && <div className="mt-2 text-sm font-semibold text-slate-700">☎ {phone}</div>}
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => _openPharmacyMap(p)}
-                            className="px-4 py-2 rounded-3xl bg-slate-900 text-white font-semibold shadow-soft hover:opacity-95 transition"
-                          >
-                            지도 보기
-                          </button>
-                          <a
-                            href={mapUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-4 py-2 rounded-3xl border border-subtle bg-white font-semibold text-slate-700 hover:bg-slate-50 transition"
-                            title="외부 지도(새 탭)"
-                          >
-                            외부
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="mt-6 text-xs text-slate-500">
-              위치를 켜면 반경/거리 정렬이 더 정확해져요.
-            </div>
+      {/* 약국 찾기(PharmacySearch) 섹션을 서비스 소개 바로 위에 배치 */}
+      <section id="pharmacy" className="py-16 md:py-20 px-6 pharmacy-bg">
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-10 text-center">
+            <h2 className="text-3xl md:text-4xl font-extrabold text-medic-main mb-2 flex items-center justify-center gap-2">
+              <span className="inline-block bg-medic-main/10 rounded-full px-3 py-1 text-medic-main">🏥</span>
+              주변 약국 찾기
+            </h2>
+            <p className="text-slate-600 text-lg font-medium mt-2">
+              내 위치 또는 지역명으로 가까운 약국을 쉽고 빠르게 검색하세요.
+            </p>
+          </div>
+          <div className="rounded-3xl border border-subtle bg-white/80 shadow-xl p-6 md:p-8">
+            <PharmacySearch />
           </div>
         </div>
       </section>
@@ -2109,18 +1954,20 @@ const MainPage = () => {
             </div>
 
             <div className="p-6">
-              {pharmacyMapState.loading ? (
-                <div className="text-sm font-semibold text-slate-600">지도 불러오는 중…</div>
-              ) : pharmacyMapState.error ? (
-                <div className="text-sm font-semibold text-red-600">{pharmacyMapState.error}</div>
-              ) : (
-                <PharmacyMap
-                  lat={pharmacyMapState.lat}
-                  lon={pharmacyMapState.lon}
-                  markers={pharmacyMapTarget ? [{ lat: pharmacyMapState.lat, lon: pharmacyMapState.lon, label: pharmacyMapTarget.name || pharmacyMapTarget.약국명 || '약국' }] : []}
-                  height={360}
-                />
-              )}
+                {pharmacyMapState.loading ? (
+                  <div className="text-sm font-semibold text-slate-600">지도 불러오는 중…</div>
+                ) : pharmacyMapState.error ? (
+                  <div className="text-sm font-semibold text-red-600">{pharmacyMapState.error}</div>
+                ) : pharmacyMapState.lat && pharmacyMapState.lon ? (
+                  <PharmacyMap
+                    lat={pharmacyMapState.lat}
+                    lon={pharmacyMapState.lon}
+                    markers={pharmacyMapTarget ? [{ lat: pharmacyMapState.lat, lon: pharmacyMapState.lon, label: pharmacyMapTarget.name || pharmacyMapTarget.약국명 || '약국' }] : []}
+                    height={360}
+                  />
+                ) : (
+                  <div className="text-sm font-semibold text-slate-600">표시할 좌표가 없어요. 약국 주소가 정확하지 않거나, 데이터에 좌표 정보가 누락된 경우입니다.<br/>검색어를 더 구체적으로 입력하거나 다른 결과를 선택해보세요.</div>
+                )}
             </div>
           </div>
         </div>
@@ -2152,8 +1999,6 @@ const MainPage = () => {
           </div>
         </div>
       </section>
-
-      </div>
 
       {/* Dev-only diagnostics badge (never shown in production build) */}
       {isDev && (
@@ -2193,6 +2038,7 @@ const MainPage = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

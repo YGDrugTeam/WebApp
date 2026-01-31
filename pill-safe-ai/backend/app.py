@@ -1,3 +1,4 @@
+# ...existing code...
 import os
 import io
 
@@ -131,6 +132,63 @@ CORS(app)
 # 서비스 초기화
 info_service = PillInfoService()
 pharmacy_service = PharmacyService()
+# ...existing code...
+
+# --- 약국 검색: POST /pharmacy/search ---
+@app.route('/pharmacy/search', methods=['POST'])
+def pharmacy_search():
+    req_id = _new_request_id()
+    try:
+        payload = request.get_json(silent=True) or {}
+        q = str(payload.get('q', '') or '').strip()
+        limit = int(payload.get('limit', 10))
+        sort = str(payload.get('sort', 'relevance') or 'relevance').strip()
+        lat = payload.get('lat')
+        lon = payload.get('lon')
+        radius_km = payload.get('radius_km')
+        # float 변환 (None 허용)
+        lat = float(lat) if lat not in (None, '') else None
+        lon = float(lon) if lon not in (None, '') else None
+        radius_km = float(radius_km) if radius_km not in (None, '') else None
+
+        include_closed = bool(payload.get('include_closed', False))
+        items = pharmacy_service.search(
+            q=q,
+            limit=limit,
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+            sort=sort,
+            include_closed=include_closed,
+        )
+        resp = make_response(
+            jsonify([i.to_dict() for i in items]),
+            200,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
+    except PharmacyServiceError as e:
+        resp = make_response(
+            jsonify({"code": e.code, "message": e.public_message}),
+            503,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
+    except ValueError:
+        resp = make_response(
+            jsonify({"code": "PHARMACY_BAD_REQUEST", "message": "요청 파라미터 형식이 올바르지 않아요."}),
+            400,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
+    except Exception as e:
+        print(f"Pharmacy API Error (POST /pharmacy/search): {e}")
+        resp = make_response(
+            jsonify({"message": "약국 정보를 불러오지 못했어요."}),
+            500,
+        )
+        resp.headers["X-Request-Id"] = req_id
+        return resp
 
 # Azure 설정 (환경 변수에서 가져옴)
 endpoint = os.getenv("AZURE_VISION_ENDPOINT")
@@ -425,6 +483,7 @@ def get_pharmacies():
             lon=lon,
             radius_km=radius_km,
             sort=sort,
+            include_closed=True,  # 임시: 모든 약국 반환
         )
 
         resp = make_response(

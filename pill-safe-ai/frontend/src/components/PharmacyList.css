@@ -1,0 +1,68 @@
+/* PharmacyList.css */
+
+.v11-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+  gap: 45px;
+  padding: 50px 0;
+}
+
+.v11-card {
+  position: relative;
+  background: white;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+/* 짝수: 세이지 그린 포인트 */
+.v11-card-even .v11-accent-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: #81b29a; opacity: 0.6;
+}
+.v11-card-even:hover { transform: translateY(-12px); box-shadow: 0 25px 50px rgba(129, 178, 154, 0.12); }
+
+/* 홀수: 뮤트 테라코타 포인트 */
+.v11-card-odd { background: #faf9f7; }
+.v11-card-odd .v11-accent-bar {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 8px; background: #e07a5f; opacity: 0.6;
+}
+.v11-card-odd:hover { transform: translateY(-12px); box-shadow: 0 25px 50px rgba(224, 122, 95, 0.12); }
+
+.v11-card-inner { padding: 40px; }
+
+.v11-tag-group { display: flex; gap: 8px; }
+.v11-tag { font-size: 11px; font-weight: 800; padding: 5px 12px; border-radius: 7px; text-transform: uppercase; }
+.v11-tag.status-pill { background: #f2cc8f33; color: #d69d44; }
+.v11-tag.type-pill { background: #f4f1de; color: #8d99ae; }
+
+.v11-distance .num { font-size: 26px; font-weight: 900; color: #3d405b; }
+.v11-distance .unit { font-size: 14px; color: #adb5bd; margin-left: 2px; }
+
+.v11-name { font-size: 30px; font-weight: 800; color: #3d405b; margin: 18px 0 10px; letter-spacing: -0.8px; }
+.v11-addr { font-size: 16px; color: #6d7085; line-height: 1.6; min-height: 3.2em; }
+
+.v11-divider { height: 1px; background: linear-gradient(to right, #e9ecef, transparent); margin: 25px 0; }
+
+.v11-action-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+
+/* 전화번호 링크 스타일 */
+.v11-phone-link {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: inherit;
+  transition: 0.2s;
+}
+.v11-phone-link:hover .v11-phone-num { color: #e07a5f; text-decoration: underline; }
+.v11-phone-num { font-size: 20px; font-weight: 700; color: #3d405b; }
+.v11-phone-icon { font-size: 20px; }
+
+.v11-badge-consult {
+  font-size: 12px; font-weight: 700; color: #81b29a;
+  background: #f0f7f4; padding: 6px 14px; border-radius: 12px;
+}
+
+.v11-map-trigger {
+  width: 100%; padding: 18px; border-radius: 18px; border: 1.5px solid #edf2f7;
+  background: white; color: #3d405b; font-weight: 800; cursor: pointer; transition: 0.3s;
+}
+.v11-map-trigger:hover { background: #3d405b; color: white; border-color: #3d405b; }

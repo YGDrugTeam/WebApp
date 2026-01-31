@@ -1,11 +1,20 @@
+
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import os
 import sqlite3
 import asyncio
 import time
+try:
+    from pharmacy_routes import router as pharmacy_router
+except Exception:
+    from .pharmacy_routes import router as pharmacy_router
 
 try:
     from dur_service import DurService, DurServiceError
@@ -26,13 +35,16 @@ except Exception:  # pragma: no cover
 
 app = FastAPI(title="MedicLens Backend")
 
-# CORS 설정
+# CORS 설정 (기존에 있을 수도 있음)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite/React 기본 포트
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
+
+app.include_router(pharmacy_router)  # 이 줄 추가
 
 # --- [환경 변수 및 설정] ---
 try:

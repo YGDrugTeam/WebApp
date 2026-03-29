@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://careflow-webapp.onrender.com";
+
 const PillImagePredictor = () => {
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
@@ -21,10 +23,13 @@ const PillImagePredictor = () => {
     try {
       const formData = new FormData();
       formData.append('file', image);
-      const res = await fetch('/analyze/pill-image', {
+
+      // 🔴 수정된 부분: URL 앞에 API_BASE_URL을 붙여줍니다.
+      const res = await fetch(`${API_BASE_URL}/analyze/pill-image`, {
         method: 'POST',
         body: formData,
       });
+      
       if (!res.ok) throw new Error('예측 실패: ' + res.status);
       const data = await res.json();
       setResult(data.result);

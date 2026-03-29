@@ -28,7 +28,7 @@ This repo includes `render.yaml`.
 Create the backend service from the blueprint or manually:
 
 - Environment: Docker
-- Dockerfile: `backend/Dockerfile`
+- Dockerfile: `pill-safe-ai/backend/Dockerfile`
 - Health check: `/health`
 
 Required environment variables:
@@ -50,7 +50,7 @@ Optional environment variables:
 
 Create a static site:
 
-- Root directory: `frontend`
+- Root directory: `pill-safe-ai/frontend`
 - Build command: `npm ci && npm run build`
 - Publish directory: `dist`
 

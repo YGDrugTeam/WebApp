@@ -28,12 +28,12 @@ This repo includes `render.yaml`.
 Create the backend service from the blueprint or manually:
 
 - Environment: Docker
-- Dockerfile: `pill-safe-ai/backend/Dockerfile`
+- Dockerfile: `backend/Dockerfile`
 - Health check: `/health`
 
 Required environment variables:
 
-- `CORS_ALLOWED_ORIGINS=https://pill-safe-web.onrender.com`
+- `CORS_ALLOWED_ORIGINS=https://<your-frontend>.onrender.com`
 - `AZURE_VISION_KEY`
 - `AZURE_VISION_ENDPOINT`
 - `AZURE_SPEECH_KEY`
@@ -50,17 +50,17 @@ Optional environment variables:
 
 Create a static site:
 
-- Root directory: `pill-safe-ai/frontend`
+- Root directory: `frontend`
 - Build command: `npm ci && npm run build`
 - Publish directory: `dist`
 
 Set both frontend environment variables to the backend URL:
 
-- `VITE_FLASK_BASE=https://pill-safe-api.onrender.com`
-- `VITE_FASTAPI_BASE=https://pill-safe-api.onrender.com`
+- `VITE_FLASK_BASE=https://careflow-webapp.onrender.com`
+- `VITE_FASTAPI_BASE=https://careflow-webapp.onrender.com`
 
 The frontend still uses both names, but the current deployed backend can answer both route groups.
-If you rename the Render services, update these URLs to match the final Render subdomains.
+If you deploy the backend under a different Render service name, update these URLs to match that final backend subdomain.
 
 ## Railway
 

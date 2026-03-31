@@ -226,7 +226,7 @@ const MainPage = () => {
 
   const FLASK_BASE = String(import.meta?.env?.VITE_FLASK_BASE || '').trim().replace(/\/$/, '');
   const FASTAPI_BASE = String(import.meta?.env?.VITE_FASTAPI_BASE || '').trim().replace(/\/$/, '');
-  const DEFAULT_RENDER_API_BASE = 'https://pill-safe-api.onrender.com';
+  const DEFAULT_RENDER_API_BASE = 'https://careflow-webapp.onrender.com';
   const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const API_BASE = FASTAPI_BASE || FLASK_BASE || (isLocalHost ? '' : DEFAULT_RENDER_API_BASE);
   const apiUrl = (path) => (API_BASE ? `${API_BASE}${path}` : path);

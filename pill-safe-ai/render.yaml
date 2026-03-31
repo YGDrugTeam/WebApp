@@ -2,7 +2,7 @@ services:
   - type: web
     name: pill-safe-api
     runtime: docker
-    dockerfilePath: ./pill-safe-ai/backend/Dockerfile
+    dockerfilePath: ./backend/Dockerfile
     plan: starter
     autoDeploy: true
     healthCheckPath: /health
@@ -34,7 +34,7 @@ services:
   - type: web
     name: pill-safe-web
     runtime: static
-    rootDir: pill-safe-ai/frontend
+    rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     pullRequestPreviewsEnabled: false

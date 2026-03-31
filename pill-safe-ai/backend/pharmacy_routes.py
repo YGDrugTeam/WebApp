@@ -12,7 +12,14 @@ except ImportError:  # pragma: no cover
 
 
 router = APIRouter(prefix="/api/pharmacies", tags=["pharmacies"])
-pharmacy_service = PharmacyService()
+_pharmacy_service: Optional[PharmacyService] = None
+
+
+def get_pharmacy_service() -> PharmacyService:
+    global _pharmacy_service
+    if _pharmacy_service is None:
+        _pharmacy_service = PharmacyService()
+    return _pharmacy_service
 
 
 class PharmacyResponse(BaseModel):
@@ -49,6 +56,7 @@ def _to_response(item) -> PharmacyResponse:
 
 @router.post("/search", response_model=List[PharmacyResponse])
 async def search_pharmacies_post(request: Request):
+    pharmacy_service = get_pharmacy_service()
     if not pharmacy_service.is_configured():
         raise HTTPException(
             status_code=503,
@@ -82,6 +90,7 @@ async def search_pharmacies(
     radius_km: Optional[float] = Query(None, ge=0.1, le=50, description="검색 반경 (km)"),
     sort: str = Query("relevance", pattern="^(relevance|distance)$", description="정렬 방식"),
 ):
+    pharmacy_service = get_pharmacy_service()
     if not pharmacy_service.is_configured():
         raise HTTPException(
             status_code=503,
@@ -108,6 +117,7 @@ async def search_pharmacies(
 
 @router.get("/health")
 async def health_check():
+    pharmacy_service = get_pharmacy_service()
     return {
         "status": "healthy" if pharmacy_service.is_configured() else "not_configured",
         "service": "pharmacy_search",

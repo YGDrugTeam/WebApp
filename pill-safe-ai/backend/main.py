@@ -68,8 +68,22 @@ except ImportError:
 
 
 _ocr_reader: Any = None
-info_service = PillInfoService()
-pharmacy_service = PharmacyService()
+_info_service: Optional[PillInfoService] = None
+_pharmacy_service: Optional[PharmacyService] = None
+
+
+def get_info_service() -> PillInfoService:
+    global _info_service
+    if _info_service is None:
+        _info_service = PillInfoService()
+    return _info_service
+
+
+def get_pharmacy_service() -> PharmacyService:
+    global _pharmacy_service
+    if _pharmacy_service is None:
+        _pharmacy_service = PharmacyService()
+    return _pharmacy_service
 
 
 def ensure_pillow_antialias_compat() -> None:
@@ -136,6 +150,7 @@ async def log_startup_diagnostics() -> None:
 
 def config_status_payload() -> dict[str, Any]:
     dur_service = DurService()
+    pharmacy_service = get_pharmacy_service()
     pharmacy_available = bool(pharmacy_service.is_configured())
     dur_available = bool(dur_service.is_configured())
     local_pharmacy_data = pharmacy_service.local_data_path()
@@ -179,6 +194,7 @@ def config_status_payload() -> dict[str, Any]:
 
 
 def pharmacy_status_payload() -> dict[str, Any]:
+    pharmacy_service = get_pharmacy_service()
     available = bool(pharmacy_service.is_configured())
     missing: list[str] = []
     local_pharmacy_data = pharmacy_service.local_data_path()
@@ -209,6 +225,7 @@ def pharmacy_status_payload() -> dict[str, Any]:
 
 
 def perform_pharmacy_search(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    pharmacy_service = get_pharmacy_service()
     q = str(payload.get("q", "") or "").strip()
     limit = int(payload.get("limit", 10))
     sort = str(payload.get("sort", "relevance") or "relevance").strip()
@@ -237,7 +254,7 @@ def perform_pharmacy_search(payload: dict[str, Any]) -> list[dict[str, Any]]:
 @app.get("/api/search")
 async def search_pill(name: Optional[str] = None):
     try:
-        result = info_service.search_and_announce(name)
+        result = get_info_service().search_and_announce(name)
         if result:
             return {"status": "success", "data": result}
         raise HTTPException(status_code=404, detail={"status": "fail", "message": "해당하는 약 정보를 찾을 수 없습니다."})

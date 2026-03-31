@@ -612,8 +612,7 @@ const MainPage = () => {
 
     const checkPharmacyStatus = async () => {
       try {
-        const base = FLASK_BASE ? `${FLASK_BASE}/pharmacies/status` : '/api/pharmacies/status';
-        const resp = await fetch(base);
+        const resp = await fetch(apiUrl('/api/pharmacies/status'));
         const text = await resp.text().catch(() => '');
         let data = {};
         try {
@@ -657,8 +656,8 @@ const MainPage = () => {
 
     const check = async () => {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const flaskUrl = FLASK_BASE ? `${FLASK_BASE}/health` : '/api/health';
-      const pharmacyUrl = FLASK_BASE ? `${FLASK_BASE}/pharmacies/status` : '/api/pharmacies/status';
+      const flaskUrl = apiUrl('/api/health');
+      const pharmacyUrl = apiUrl('/api/pharmacies/status');
 
       const next = {
         checkedAt: new Date().toISOString(),
@@ -713,7 +712,7 @@ const MainPage = () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [isDev, FLASK_BASE]);
+  }, [isDev, API_BASE]);
 
   const requestGeolocation = async () => {
     setGeoLoading(true);

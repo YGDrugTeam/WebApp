@@ -29,6 +29,8 @@ backend/*.log
 
 # Local data exports
 backend/data/
+!backend/data/pharmacies_seoul_utf8.csv
+!backend/data/pill_data_final_remake 1.json
 
 # RAG generated index artifacts
 backend/rag_agent/*.pkl

@@ -256,6 +256,37 @@ class PharmacyService:
             return []
         return rows
 
+    def _prepare_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        prepared: list[dict[str, Any]] = []
+
+        def normalize_korean(text: Any) -> str:
+            import unicodedata
+
+            if not isinstance(text, str):
+                text = str(text)
+            return unicodedata.normalize("NFKC", text).lower().replace(" ", "")
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+
+            display_row = {str(key).replace("\ufeff", "").strip(): value for key, value in row.items()}
+            display_fields = list(display_row.keys())
+            text = " ".join([str(display_row.get(field, "") or "") for field in display_fields]).strip()
+            lat, lon = _extract_lat_lon(display_row)
+
+            prepared.append(
+                {
+                    "display_row": display_row,
+                    "search_text": normalize_korean(text),
+                    "lat": lat,
+                    "lon": lon,
+                    "status_name": str(display_row.get("영업상태명") or display_row.get("상세영업상태명") or "").strip(),
+                }
+            )
+
+        return prepared
+
     def _fetch_rows_cached(self, *, limit: int = 3000, per_page: int = 200) -> List[Dict[str, Any]]:
         local_path = self._resolve_local_data_path()
         rows: List[Dict[str, Any]] = []
@@ -266,8 +297,9 @@ class PharmacyService:
             else:
                 rows = self._read_local_xlsx(local_path, limit)
 
-        self._cache = {"ts": time.time(), "rows": rows, "source": str(local_path) if local_path else ""}
-        return list(rows)
+        prepared_rows = self._prepare_rows(rows)
+        self._cache = {"ts": time.time(), "rows": prepared_rows, "source": str(local_path) if local_path else ""}
+        return list(prepared_rows)
     def search(
         self,
         q: str = "",
@@ -281,12 +313,6 @@ class PharmacyService:
         rows = self._fetch_rows_cached(limit=3000)
         candidates = []
         query = str(q or '').strip()
-
-        # xlsx의 모든 컬럼명을 동적으로 가져와 display_fields로 사용
-        if rows:
-            display_fields = list(rows[0].keys())
-        else:
-            display_fields = []
 
         import re
         def normalize_korean(text):
@@ -303,16 +329,15 @@ class PharmacyService:
             if not isinstance(row, dict):
                 continue
 
+            display_row = row.get("display_row") or {}
+
             if not include_closed:
-                status_name = str(row.get("영업상태명") or row.get("상세영업상태명") or "").strip()
+                status_name = str(row.get("status_name") or "").strip()
                 if status_name and status_name != "영업/정상":
                     continue
 
-            display_row = {k: row.get(k, '') for k in display_fields}
-            # 모든 컬럼을 검색 텍스트로 사용
-            text = ' '.join([str(display_row.get(f, '')) for f in display_fields])
-            ntext = normalize_korean(text)
-            if not text:
+            ntext = str(row.get("search_text") or "")
+            if not ntext:
                 continue
 
             match = True
@@ -330,7 +355,8 @@ class PharmacyService:
             out_lon: Optional[float] = None
 
             # 좌표 추출
-            rlat, rlon = _extract_lat_lon(row)
+            rlat = row.get("lat")
+            rlon = row.get("lon")
             out_lat, out_lon = (rlat, rlon)
             if lat is not None and lon is not None and rlat is not None and rlon is not None:
                 distance_km = _haversine_km(lat, lon, rlat, rlon)

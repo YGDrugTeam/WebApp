@@ -1,7 +1,13 @@
+# Node
+node_modules/
+dist/
+.npm/
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.db
 
 # Virtual environments
 .venv/

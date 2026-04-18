@@ -1,89 +1,3 @@
-# ...existing code...
-import os
-import io
-
-from flask import Flask, jsonify, make_response, request
-from flask_cors import CORS
-
-from info_service import PillInfoService
-from pharmacy_service import PharmacyService, PharmacyServiceError
-
-# Optional ML deps (allow server to start even if not installed)
-try:  # pragma: no cover
-    import torch
-    import torchvision.transforms as transforms
-    from PIL import Image
-except Exception:  # pragma: no cover
-    torch = None
-    transforms = None
-    Image = None
-
-try:  # pragma: no cover
-    from azure.ai.vision.imageanalysis import ImageAnalysisClient
-    from azure.core.credentials import AzureKeyCredential
-except Exception:  # pragma: no cover
-    ImageAnalysisClient = None
-    AzureKeyCredential = None
-
-# Optional OCR fallback deps
-try:  # pragma: no cover
-    import numpy as np
-except Exception:  # pragma: no cover
-    np = None
-
-try:  # pragma: no cover
-    import easyocr
-except Exception:  # pragma: no cover
-    easyocr = None
-
-from pharmacy_service import PharmacyService, PharmacyServiceError
-try:
-    from dur_service import DurService, DurServiceError
-except Exception:  # pragma: no cover
-    from .dur_service import DurService, DurServiceError
-
-app = Flask(__name__)
-pharmacy_service = PharmacyService()
-
-# 서비스 초기화
-info_service = PillInfoService()
-# 캐시 강제 초기화 엔드포인트 (관리용)
-pharmacy_service = PharmacyService()
-
-# Azure 설정 (환경 변수에서 가져옴)
-endpoint = os.getenv("AZURE_VISION_ENDPOINT")
-key = os.getenv("AZURE_VISION_KEY")
-
-# 클라이언트 초기화 (optional)
-vision_client = None
-if ImageAnalysisClient and AzureKeyCredential and endpoint and key:
-    try:
-        vision_client = ImageAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
-    except Exception as e:
-        print(f"Azure Vision Client 초기화 실패: {e}")
-
-# --- 전체 약품 정보 요약 API ---
-@app.route('/api/pills', methods=['GET'])
-def get_all_pills():
-    """모든 약품의 주요 정보를 리스트로 반환 (프론트엔드용)"""
-    try:
-        pills = []
-        for pill_id, info in info_service.pill_data_json.items():
-            if not isinstance(info, dict):
-                continue
-            pills.append({
-                "id": pill_id,
-                "name": info.get("name", ""),
-                "manufacturer": info.get("manufacturer", ""),
-                "effect": info.get("effect", ""),
-                "usage": info.get("usage", ""),
-                "caution": info.get("caution", ""),
-                "storage": info.get("storage", "")
-            })
-        return jsonify({"status": "success", "data": pills})
-    except Exception as e:
-        print(f"🔥 /api/pills 에러: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
 import os
 import io
 
@@ -132,7 +46,6 @@ CORS(app)
 # 서비스 초기화
 info_service = PillInfoService()
 pharmacy_service = PharmacyService()
-# ...existing code...
 
 # --- 약국 검색: POST /pharmacy/search ---
 @app.route('/pharmacy/search', methods=['POST'])

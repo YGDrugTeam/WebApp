@@ -166,6 +166,7 @@ async def pharmacies_status():
     return pharmacy_status_payload()
 
 
+@app.post("/pharmacy/search")
 @app.post("/api/pharmacy/search")
 async def pharmacy_search_compat(request: Request):
     try:

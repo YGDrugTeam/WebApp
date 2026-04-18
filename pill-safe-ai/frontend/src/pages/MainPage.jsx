@@ -60,7 +60,7 @@ const MainPage = () => {
         payload.lon = geo.lon;
         payload.radius_km = radiusKm;
       }
-      const resp = await fetch('/api/pharmacy/search', {
+      const resp = await fetch(FASTAPI_BASE ? `${FASTAPI_BASE}/pharmacy/search` : '/api/pharmacy/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -220,7 +220,6 @@ const MainPage = () => {
     [filters],
   );
 
-  const FLASK_BASE = String(import.meta?.env?.VITE_FLASK_BASE || '').trim().replace(/\/$/, '');
   const FASTAPI_BASE = String(import.meta?.env?.VITE_FASTAPI_BASE || '').trim().replace(/\/$/, '');
 
   // 복용 약 localStorage sync
@@ -287,11 +286,6 @@ const MainPage = () => {
         {
           label: 'fastapi',
           url: FASTAPI_BASE ? `${FASTAPI_BASE}/dur/check` : '/ml/dur/check',
-        },
-        {
-          label: 'flask',
-          // Flask fallback (when only Flask 5000 is running)
-          url: FLASK_BASE ? `${FLASK_BASE}/ml/dur/check` : '/api/ml/dur/check',
         },
       ];
 
@@ -368,10 +362,6 @@ const MainPage = () => {
       {
         label: 'fastapi',
         url: FASTAPI_BASE ? `${FASTAPI_BASE}/dur/status` : '/ml/dur/status',
-      },
-      {
-        label: 'flask',
-        url: FLASK_BASE ? `${FLASK_BASE}/ml/dur/status` : '/api/ml/dur/status',
       },
     ];
 
@@ -576,8 +566,8 @@ const MainPage = () => {
       }
 
       // Flask: GET /search?name=...
-      const url = FLASK_BASE
-        ? `${FLASK_BASE}/search?name=${encodeURIComponent(term)}`
+      const url = FASTAPI_BASE
+        ? `${FASTAPI_BASE}/search?name=${encodeURIComponent(term)}`
         : `/api/search?name=${encodeURIComponent(term)}`;
 
       const response = await fetch(url);
@@ -606,9 +596,9 @@ const MainPage = () => {
       setResults([]);
       setInfoCards([]);
       setErrorMessage(
-        FLASK_BASE
-          ? '서버에 연결할 수 없어요. VITE_FLASK_BASE 주소/포트를 확인해주세요.'
-          : '서버에 연결할 수 없어요. Vite 개발 서버와 Flask(5000)가 모두 실행 중인지 확인해주세요.',
+        FASTAPI_BASE
+          ? '서버에 연결할 수 없어요. VITE_FASTAPI_BASE 주소/포트를 확인해주세요.'
+          : '서버에 연결할 수 없어요. Vite 개발 서버와 FastAPI(8000)가 모두 실행 중인지 확인해주세요.',
       );
     } finally {
       setLoading(false);
@@ -620,7 +610,7 @@ const MainPage = () => {
 
     const checkPharmacyStatus = async () => {
       try {
-        const base = FLASK_BASE ? `${FLASK_BASE}/pharmacies/status` : '/api/pharmacies/status';
+        const base = FASTAPI_BASE ? `${FASTAPI_BASE}/pharmacies/status` : '/api/pharmacies/status';
         const resp = await fetch(base);
         const text = await resp.text().catch(() => '');
         let data = {};
@@ -665,8 +655,8 @@ const MainPage = () => {
 
     const check = async () => {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const flaskUrl = FLASK_BASE ? `${FLASK_BASE}/health` : '/api/health';
-      const pharmacyUrl = FLASK_BASE ? `${FLASK_BASE}/pharmacies/status` : '/api/pharmacies/status';
+      const flaskUrl = FASTAPI_BASE ? `${FASTAPI_BASE}/health` : '/api/health';
+      const pharmacyUrl = FASTAPI_BASE ? `${FASTAPI_BASE}/pharmacies/status` : '/api/pharmacies/status';
 
       const next = {
         checkedAt: new Date().toISOString(),
@@ -721,7 +711,7 @@ const MainPage = () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [isDev, FLASK_BASE]);
+  }, [isDev, FASTAPI_BASE]);
 
   const requestGeolocation = async () => {
     setGeoLoading(true);
@@ -928,11 +918,6 @@ const MainPage = () => {
         {
           label: 'fastapi',
           url: FASTAPI_BASE ? `${FASTAPI_BASE}/analyze/ocr?user_id=demo` : '/ml/analyze/ocr?user_id=demo',
-        },
-        {
-          label: 'flask',
-          // Flask: POST /ml/analyze/ocr
-          url: FLASK_BASE ? `${FLASK_BASE}/ml/analyze/ocr?user_id=demo` : '/api/ml/analyze/ocr?user_id=demo',
         },
       ];
 

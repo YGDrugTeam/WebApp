@@ -39,7 +39,5 @@ services:
     staticPublishPath: dist
     pullRequestPreviewsEnabled: false
     envVars:
-      - key: VITE_FLASK_BASE
-        value: https://pill-safe-api.onrender.com
       - key: VITE_FASTAPI_BASE
         value: https://pill-safe-api.onrender.com
